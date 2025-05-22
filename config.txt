@@ -1,0 +1,6 @@
+# Stations on PC
+Testing
+Assembly
+
+# Log Directory
+../DowntimeLogs/logs
