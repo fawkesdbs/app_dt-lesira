@@ -139,19 +139,18 @@ class DowntimeTrackerUI:
             if op_id in OPERATORS:
                 op_name = OPERATORS[op_id]
                 # Check if operator is already in downtime (anywhere)
-                if self.state.is_downtime_active(op_name):
-                    messagebox.showerror(
-                        "Already in Downtime",
-                        f"{op_name} is already in a downtime and cannot be added to another.",
-                    )
-                elif op_name not in scanned_operators:
+                # if self.state.is_downtime_active(op_name):
+                #     messagebox.showerror(
+                #         "Already in Downtime",
+                #         f"{op_name} is already in a downtime and cannot be added to another.",
+                #     )
+                # el
+                if op_name not in scanned_operators:
                     scanned_operators.append(op_name)
                     update_operator_list()
                     operator_count.config(
                         text=f"{len(scanned_operators)} operators added."
                     )
-                    modal.update_idletasks()
-                    center_top_popup(self.root, modal, width=400)
                 else:
                     messagebox.showwarning("Duplicate", f"{op_name} already scanned.")
             else:
@@ -190,11 +189,20 @@ class DowntimeTrackerUI:
             # Final check before starting downtime
             already_in_downtime = self.state.can_start_downtime(scanned_operators)
             if already_in_downtime:
-                messagebox.showerror(
-                    "Operator(s) Already in Downtime",
-                    f"The following operator(s) are already in downtime and cannot be added: {'\n'.join(already_in_downtime)}",
+                self.state.stop_downtime(already_in_downtime)
+                # Optionally, show info to user
+                messagebox.showinfo(
+                    "Previous Downtime Ended",
+                    f"Previous downtime(s) for the following operator(s) were automatically ended: {'\n'.join(already_in_downtime)}",
                 )
-                return
+                for op in already_in_downtime:
+                    for dt in self.active_downtimes:
+                        if op in dt["operators"]:
+                            dt["operators"].remove(op)
+                self.active_downtimes = [
+                    dt for dt in self.active_downtimes if dt["operators"]
+                ]
+
             event = selected_event.get()
             self.state.start_downtime(
                 self.selected_station.get(), event, scanned_operators
