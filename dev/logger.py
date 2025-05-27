@@ -3,8 +3,8 @@ import uuid
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from config import EVENTS
-from time_sync import TimeSync
+from .config import EVENTS
+from .time_sync import TimeSync
 
 
 class DowntimeLogger:

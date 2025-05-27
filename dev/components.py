@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, font
-from state import AppState
+from .state import AppState
 from collections import defaultdict
 from typing import Dict, Callable
 

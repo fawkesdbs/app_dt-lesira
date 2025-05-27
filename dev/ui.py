@@ -3,9 +3,9 @@ from tkinter import messagebox, ttk
 from collections import defaultdict
 import datetime
 from typing import Dict, List, Callable, Optional
-from config import station_names, EVENTS, OPERATORS
-from components import CollapsibleLogFrame, DowntimeEventSelector
-from state import AppState
+from .config import station_names, EVENTS, OPERATORS
+from .components import CollapsibleLogFrame, DowntimeEventSelector
+from .state import AppState
 
 
 def center_top_popup(parent: tk.Tk, popup: tk.Toplevel, width=400, y_offset=0):
@@ -30,6 +30,7 @@ class DowntimeTrackerUI:
         # Track all active downtimes: each is a dict with keys: station, event, operators (list)
         self.active_downtimes: List[Dict] = []
         self.summary_popup = None
+        self.operator_station_map: Dict[str, str] = {}
         self._load_active_downtimes_from_log()
         self.setup_ui()
 
@@ -205,17 +206,27 @@ class DowntimeTrackerUI:
                 ]
 
             event = selected_event.get()
-            self.state.start_downtime(
-                self.selected_station.get(), event, scanned_operators
-            )
-            # Track this downtime in the UI
-            self.active_downtimes.append(
-                {
-                    "station": self.selected_station.get(),
-                    "event": event,
-                    "operators": scanned_operators.copy(),
-                }
-            )
+
+            for op in scanned_operators:
+                if op not in self.operator_station_map:
+                    self.operator_station_map[op] = self.selected_station.get()
+
+            operator_station = {}
+            print(self.operator_station_map)
+            for op in scanned_operators:
+                station = self.operator_station_map.get(op, self.selected_station.get())
+                operator_station[op] = station
+
+            for op, station in operator_station.items():
+                self.state.start_downtime(station, event, [op])
+                # Track this downtime in the UI
+                self.active_downtimes.append(
+                    {
+                        "station": station,
+                        "event": event,
+                        "operators": [op],
+                    }
+                )
             modal.destroy()
             op_str = "\n".join(scanned_operators)
             messagebox.showinfo(
