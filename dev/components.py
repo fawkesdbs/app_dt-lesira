@@ -46,12 +46,15 @@ class CollapsibleLogFrame(ttk.Frame):
 
         self.tree = ttk.Treeview(
             self.tree_frame,
-            columns=("Time", "Category", "Downtime", "Operator"),
+            columns=("Time", "Category", "Downtime", "Operator", "Status"),
             show="headings",
         )
         for col in self.tree["columns"]:
             self.tree.heading(col, text=col)
-            self.tree.column(col, anchor="w", width=100)
+            if col == "Status":
+                self.tree.column(col, anchor="center", width=50)
+            else:
+                self.tree.column(col, anchor="w", width=100)
 
         self.scrollbar = ttk.Scrollbar(
             self.tree_frame, orient="vertical", command=self.tree.yview
@@ -62,6 +65,12 @@ class CollapsibleLogFrame(ttk.Frame):
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
         self.tree_frame.grid_remove()
+
+        self.tree.tag_configure("ended", foreground="#0b334c")
+        self.tree.tag_configure("live", foreground="#042f04")
+        # You can also set background if you want:
+        self.tree.tag_configure("ended", background="#e5e5ff")
+        # self.tree.tag_configure("live", background="#b2ff9b")
 
         self.update_log_display()
 
@@ -109,6 +118,12 @@ class CollapsibleLogFrame(ttk.Frame):
         if self.expanded:
             self.tree.delete(*self.tree.get_children())
             for entry in log:
+                status = entry.get("status", "").lower()
+                tag = None
+                if status == "live":
+                    tag = "live"
+                elif status == "✔️":
+                    tag = "ended"
                 self.tree.insert(
                     "",
                     "end",
@@ -117,7 +132,9 @@ class CollapsibleLogFrame(ttk.Frame):
                         entry["category"],
                         entry["event"],
                         entry["operator"],
+                        entry["status"],
                     ),
+                    tags=(tag,) if tag else (),
                 )
             self.autosize_columns()
 
@@ -143,14 +160,16 @@ class DowntimeEventSelector:
 
     def _build_selector(self):
         self.window = tk.Toplevel(self.master)
-        self.window.title("Select Downtime Event")
+        self.master.update_idletasks()
         width = 400
-        height = 350
-        self.window.geometry(f"{width}x{height}")
-
-        x = self.master.winfo_x() + (self.master.winfo_width() // 2) - (width // 2)
-        y = self.master.winfo_y() - 60
-        self.window.geometry(f"+{x}+{y}")
+        height = 320
+        parent_x = self.master.winfo_x()
+        parent_y = self.master.winfo_y()
+        parent_width = self.master.winfo_width()
+        x = parent_x + (parent_width // 2) - (width // 2)
+        y = parent_y
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
+        self.window.title("Select Downtime Event")
 
         self.window.transient(self.master)
         self.window.grab_set()
@@ -174,7 +193,13 @@ class DowntimeEventSelector:
 
         self.listbox.bind("<Double-Button-1>", self._on_select)
 
-        tk.Button(self.window, text="Select", command=self._on_select).pack(pady=5)
+        # tk.Button(
+        #     self.window,
+        #     text="Select",
+        #     command=self._on_select,
+        #     background="#5E5E5E",
+        #     foreground="#ffffff",
+        # ).pack(pady=5)
 
     def _on_select(self, event=None):
         selection = self.listbox.curselection()

@@ -1,0 +1,5 @@
+For Python 3.8
+venv38/Scripts/python.exe -m PyInstaller --onefile --windowed --icon=assets/icon.ico --add-data "assets/icon.ico;assets" --add-data "data/operators.csv;data" --distpath "dist38" main_py38.py
+
+For Python 3.12
+venv/Scripts/python.exe -m PyInstaller --onefile --windowed --icon=assets/icon.ico --add-data "assets/icon.ico;assets" --add-data "data/operators.csv;data" --distpath "dist" main.py

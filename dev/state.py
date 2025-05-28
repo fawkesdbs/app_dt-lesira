@@ -96,6 +96,8 @@ class AppState:
             try:
                 timestamp_str: str = entry.get("start_time") or ""
                 timestamp: datetime = datetime.fromisoformat(timestamp_str)
+                end_time = entry.get("end_time", "Unknown")
+                status = "Live" if not end_time or end_time == "Unknown" else "✔️"
 
                 processed.append(
                     {
@@ -106,6 +108,7 @@ class AppState:
                         "station": entry.get("station", "Unknown"),
                         "end_time": entry.get("end_time", "Unknown"),
                         "duration_minutes": entry.get("duration_minutes", "Unknown"),
+                        "status": status,
                     }
                 )
             except Exception as e:

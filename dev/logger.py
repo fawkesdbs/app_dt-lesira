@@ -1,3 +1,4 @@
+import os
 import json
 import uuid
 from pathlib import Path
@@ -90,3 +91,47 @@ class DowntimeLogger:
             self.save_log(log_data, date_str)
 
         return updated_ids
+
+
+class OperatorStationMap:
+    def __init__(self, log_dir_path: str, filename: str = "operator_station_map.json"):
+        self.file_path = os.path.join(log_dir_path, filename)
+        self._map: Dict[str, str] = {}
+        self._load()
+
+    def _load(self):
+        if os.path.exists(self.file_path):
+            try:
+                with open(self.file_path, "r", encoding="utf-8") as f:
+                    self._map = json.load(f)
+            except Exception as e:
+                print(f"[OperatorStationMap] Failed to load: {e}")
+                self._map = {}
+        else:
+            self._map = {}
+
+    def _save(self):
+        try:
+            with open(self.file_path, "w", encoding="utf-8") as f:
+                json.dump(self._map, f, indent=2)
+        except Exception as e:
+            print(f"[OperatorStationMap] Failed to save: {e}")
+
+    def set(self, operator: str, station: str):
+        self._map[operator] = station
+        self._save()
+
+    def get(self, operator: str) -> Optional[str]:
+        return self._map.get(operator)
+
+    def remove(self, operator: str):
+        if operator in self._map:
+            del self._map[operator]
+            self._save()
+
+    def as_dict(self) -> Dict[str, str]:
+        return dict(self._map)
+
+    def clear(self):
+        self._map = {}
+        self._save()

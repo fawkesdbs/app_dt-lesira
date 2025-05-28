@@ -1,11 +1,14 @@
+import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 from collections import defaultdict
 import datetime
 from typing import Dict, List, Callable, Optional
-from .config import station_names, EVENTS, OPERATORS
+from .config import log_dir_path, station_names, EVENTS, OPERATORS
 from .components import CollapsibleLogFrame, DowntimeEventSelector
 from .state import AppState
+from .logger import OperatorStationMap
+
 
 def center_top_popup(parent: tk.Tk, popup: tk.Toplevel, width=400, y_offset=0):
     """
@@ -29,6 +32,11 @@ class DowntimeTrackerUI:
         # Track all active downtimes: each is a dict with keys: station, event, operators (list)
         self.active_downtimes: List[Dict] = []
         self.summary_popup = None
+        stations_dir = os.path.normpath(
+            os.path.join(os.path.dirname(log_dir_path), "stations")
+        )
+        os.makedirs(stations_dir, exist_ok=True)
+        self.operator_station_map = OperatorStationMap(stations_dir)
         self._load_active_downtimes_from_log()
         self.setup_ui()
 
@@ -118,8 +126,8 @@ class DowntimeTrackerUI:
         operator_entry = tk.Entry(entry_frame, width=20)
         operator_entry.grid(row=0, column=0, padx=5)
         operator_entry.focus_set()
-        add_btn = tk.Button(entry_frame, text="Add", command=lambda: add_operator())
-        add_btn.grid(row=0, column=1, padx=5)
+        # add_btn = tk.Button(entry_frame, text="Add", command=lambda: add_operator())
+        # add_btn.grid(row=0, column=1, padx=5)
 
         operator_listbox = tk.Listbox(modal, height=3, width=30)
         operator_listbox.pack(pady=5)
@@ -174,6 +182,8 @@ class DowntimeTrackerUI:
             modal,
             text="Choose Downtime Event",
             command=lambda: DowntimeEventSelector(modal, EVENTS, on_event_selected),
+            background="#626aff",
+            foreground="#ffffff",
         ).pack(pady=5)
 
         def submit():
@@ -204,17 +214,31 @@ class DowntimeTrackerUI:
                 ]
 
             event = selected_event.get()
-            self.state.start_downtime(
-                self.selected_station.get(), event, scanned_operators
-            )
-            # Track this downtime in the UI
-            self.active_downtimes.append(
-                {
-                    "station": self.selected_station.get(),
-                    "event": event,
-                    "operators": scanned_operators.copy(),
-                }
-            )
+
+            operator_station = {}
+            if event == "Operator move":
+                # Remove operator from map for Operator Move
+                for op in scanned_operators:
+                    operator_station[op] = self.operator_station_map.get(op)
+                    self.operator_station_map.remove(op)
+            else:
+                for op in scanned_operators:
+                    # If not mapped, add to map with current station
+                    if self.operator_station_map.get(op) is None:
+                        self.operator_station_map.set(op, self.selected_station.get())
+                    # Use the mapped station (new or existing)
+                    operator_station[op] = self.operator_station_map.get(op)
+
+            for op, station in operator_station.items():
+                self.state.start_downtime(station, event, [op])
+                # Track this downtime in the UI
+                self.active_downtimes.append(
+                    {
+                        "station": station,
+                        "event": event,
+                        "operators": [op],
+                    }
+                )
             modal.destroy()
             op_str = "\n".join(scanned_operators)
             messagebox.showinfo(
@@ -223,12 +247,14 @@ class DowntimeTrackerUI:
             )
             self.log_frame.update_log_display()
 
-        tk.Button(modal, text="Submit", command=submit).pack(pady=5)
-        center_top_popup(
-            self.root,
+        tk.Button(
             modal,
-            width=400,
-        )
+            text="Submit",
+            command=submit,
+            background="#5E5E5E",
+            foreground="#ffffff",
+        ).pack(pady=5)
+        center_top_popup(self.root, modal, width=400)
 
     def on_stop_downtime(self) -> None:
         # If there are no active downtimes, nothing to stop
@@ -252,10 +278,10 @@ class DowntimeTrackerUI:
         entry_frame = tk.Frame(modal)
         entry_frame.pack(pady=5)
         operator_entry = tk.Entry(entry_frame, width=20)
-        operator_entry.grid(row=0, column=0, padx=5)
+        operator_entry.grid(row=0, column=0, columnspan=2, padx=5)
         operator_entry.focus_set()
-        add_btn = tk.Button(entry_frame, text="Add", command=lambda: add_operator())
-        add_btn.grid(row=0, column=1, padx=5)
+        # add_btn = tk.Button(entry_frame, text="Add", command=lambda: add_operator())
+        # add_btn.grid(row=0, column=1, padx=5)
 
         operator_listbox = tk.Listbox(modal, height=3, width=30)
         operator_listbox.pack(pady=5)
@@ -318,7 +344,13 @@ class DowntimeTrackerUI:
             # No need to disable STOP button; user can always try to stop more, or see warning if none left
             self.log_frame.update_log_display()
 
-        tk.Button(modal, text="Submit", command=submit).pack(pady=15)
+        tk.Button(
+            modal,
+            text="Submit",
+            command=submit,
+            background="#5E5E5E",
+            foreground="#ffffff",
+        ).pack(pady=15)
         center_top_popup(self.root, modal, width=400)
 
     def show_operator_summary_popup(self):
@@ -368,7 +400,9 @@ class DowntimeTrackerUI:
         for op, total, count in summary:
             tree.insert("", "end", values=(op, total))
 
-        close_btn = tk.Button(popup, text="Close", command=popup.destroy)
+        close_btn = tk.Button(
+            popup, text="Close", command=popup.destroy, background="#ff6d6d"
+        )
         close_btn.pack(pady=5)
 
         popup.update_idletasks()
