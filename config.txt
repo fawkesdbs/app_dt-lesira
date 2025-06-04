@@ -1,6 +1,23 @@
 # Stations on PC
+Battery Potting
+Body Assembly
+Coil Winding
+Electronics Assembly
+Manifold Assembly
+CIU Commisioning
+Lid Assembly
+Pressure Test
+Valve Assembly
+Probe Soldering
+Unknown
+Battery Soldering
+Coil Soldering
+Cover Assembly
+Battery Welding
+Electronics Preparation
+Jet Setting
 Probe Potting
-Assembly
+None
 
 # Log Directory
-../DowntimeLogs/logs
+C:/DowntimeLogs/logs

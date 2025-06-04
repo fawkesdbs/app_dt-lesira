@@ -65,12 +65,10 @@ class CollapsibleLogFrame(ttk.Frame):
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
         self.tree_frame.grid_remove()
-
-        self.tree.tag_configure("ended", foreground="#0b334c")
-        self.tree.tag_configure("live", foreground="#042f04")
-        # You can also set background if you want:
+        
         self.tree.tag_configure("ended", background="#e5e5ff")
-        # self.tree.tag_configure("live", background="#b2ff9b")
+        self.tree.tag_configure("live", foreground="#042f04", background="#e5ffe5")
+        self.tree.tag_configure("ended", background="#fffd6a")
 
         self.update_log_display()
 

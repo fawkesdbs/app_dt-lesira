@@ -122,7 +122,7 @@ class OperatorStationMap:
         self._save()
 
     def get(self, operator: str) -> Optional[str]:
-        return self._map.get(operator)
+        return self._map.get(operator, "Unknown")
 
     def remove(self, operator: str):
         if operator in self._map:

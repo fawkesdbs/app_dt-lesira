@@ -16,7 +16,7 @@ def launch_app():
     log = logger.DowntimeLogger(config.log_dir, time)
     sta = state.AppState(log)
     sta.load_active_downtimes_from_log()
-    app = ui.DowntimeTrackerUI(root, sta)
+    app = ui.DowntimeTrackerUI(root, sta, time)
     root.iconbitmap(config.resource_path("assets/icon.ico"))
     root.mainloop()
 
