@@ -183,7 +183,7 @@ class OperatorStationMap:
         # with FileLock(self.lock_path, timeout=5):
         self._load()
         print(
-            f"[OperatorStationMap] Mapping on get: {operator} | {self._map.get(operator, "Unknown")}"
+            f"[OperatorStationMap] Mapping on get: {operator} | {self._map.get(operator, 'Unknown')}"
         )
         return self._map.get(operator, "Unknown")
 

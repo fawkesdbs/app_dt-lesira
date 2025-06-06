@@ -50,7 +50,7 @@ EVENTS = {
     "Preparation": "Production",
     "Meeting": "Production",
     "Training": "Production",
-    "No material from stores": "Production",
+    "No material from stores": "Inventory",
     "No material from production": "Production",
     "Housekeeping": "Production",
     "Micro stoppage (Minor adjustment)": "Production",
