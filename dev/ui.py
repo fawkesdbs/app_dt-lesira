@@ -8,6 +8,7 @@ from .config import log_dir_path, station_names, EVENTS, OPERATORS
 from .components import CollapsibleLogFrame, DowntimeEventSelector
 from .state import AppState
 from .logger import OperatorStationMap
+from .time_sync import TimeSync
 
 
 def center_top_popup(parent: tk.Tk, popup: tk.Toplevel, width=400, y_offset=0):
@@ -24,9 +25,11 @@ def center_top_popup(parent: tk.Tk, popup: tk.Toplevel, width=400, y_offset=0):
 
 
 class DowntimeTrackerUI:
-    def __init__(self, root: tk.Tk, state: AppState):
+    def __init__(
+        self, root: tk.Tk, app_state: AppState, time_sync: Optional[TimeSync] = None
+    ):
         self.root: tk.Tk = root
-        self.state = state
+        self.state = app_state
         self.selected_station = tk.StringVar()
         self.selected_station.set(station_names[0])
         # Track all active downtimes: each is a dict with keys: station, event, operators (list)
@@ -36,9 +39,13 @@ class DowntimeTrackerUI:
             os.path.join(os.path.dirname(log_dir_path), "stations")
         )
         os.makedirs(stations_dir, exist_ok=True)
-        self.operator_station_map = OperatorStationMap(stations_dir)
+        self.operator_station_map = OperatorStationMap(
+            stations_dir, time_sync=time_sync
+        )
         self._load_active_downtimes_from_log()
         self.setup_ui()
+
+        self._schedule_new_day_check()
 
     def setup_ui(self) -> None:
         self.root.title(f"Downtime Tracker")
@@ -72,7 +79,34 @@ class DowntimeTrackerUI:
             text="Operator Summary",
             command=self.show_operator_summary_popup,
         )
-        summary_btn.grid(row=0, column=2, sticky="W", padx=10, pady=5)
+        summary_btn.grid(row=0, column=2, sticky="W", padx=5, pady=5)
+
+        signin_btn = tk.Button(
+            header_frame,
+            text="  In  ",
+            command=self.on_sign_in,
+            background="#4CAF50",
+            foreground="#ffffff",
+        )
+        signin_btn.grid(row=0, column=3, sticky="W", padx=(80, 5), pady=5)
+
+        signout_btn = tk.Button(
+            header_frame,
+            text="Out",
+            command=self.on_sign_out,
+            background="#f44336",
+            foreground="#ffffff",
+        )
+        signout_btn.grid(row=0, column=4, sticky="W", padx=5, pady=5)
+
+        # clear_btn = tk.Button(
+        #     header_frame,
+        #     text="Clr",
+        #     command=self.clear_map,
+        #     background="#f44336",
+        #     foreground="#ffffff",
+        # )
+        # clear_btn.grid(row=0, column=5, sticky="W", padx=5, pady=5)
 
         events_frame = tk.LabelFrame(self.root, text="Downtime Control")
         events_frame.grid(row=1, column=0, padx=10, pady=5, columnspan=3, sticky="W")
@@ -102,6 +136,178 @@ class DowntimeTrackerUI:
         self.root.update_idletasks()
         self.root.geometry(f"{self.width}x{self.root.winfo_height()}+{self.x}+{self.y}")
 
+    def on_sign_in(self):
+        modal = tk.Toplevel(self.root)
+        modal.title("Sign In to Station")
+        modal.transient(self.root)
+        modal.grab_set()
+        modal.focus_set()
+
+        tk.Label(
+            modal,
+            text=f"Station: {self.selected_station.get()}",
+            font=("TkDefaultFont", 16),
+        ).pack(pady=5)
+
+        tk.Label(modal, text="Scan Operator IDs to sign in:").pack(pady=5)
+        entry_frame = tk.Frame(modal)
+        entry_frame.pack(pady=5)
+        operator_entry = tk.Entry(entry_frame, width=20)
+        operator_entry.grid(row=0, column=0, padx=5)
+        operator_entry.focus_set()
+
+        operator_listbox = tk.Listbox(modal, height=3, width=30)
+        operator_listbox.pack(pady=5)
+        operator_count = tk.Label(modal, text="No operators added.")
+        operator_count.pack(pady=5)
+
+        scanned_operators: List[str] = []
+
+        def update_operator_list():
+            operator_listbox.delete(0, tk.END)
+            for op in scanned_operators:
+                operator_listbox.insert(tk.END, op)
+
+        def add_operator():
+            op_id = operator_entry.get().strip()
+            if op_id in OPERATORS:
+                op_name = OPERATORS[op_id]
+                if op_name not in scanned_operators:
+                    scanned_operators.append(op_name)
+                    update_operator_list()
+                    operator_count.config(
+                        text=f"{len(scanned_operators)} operators added."
+                    )
+                else:
+                    messagebox.showwarning("Duplicate", f"{op_name} already scanned.")
+            else:
+                messagebox.showerror(
+                    "Invalid Operator", f"ID '{op_id}' not recognized."
+                )
+            operator_entry.delete(0, tk.END)
+            operator_entry.focus_set()
+
+        operator_entry.bind("<Return>", lambda event: add_operator())
+
+        def submit():
+            if not scanned_operators:
+                messagebox.showerror(
+                    "Missing Operators", "Please scan at least one operator."
+                )
+                return
+            station = self.selected_station.get()
+            log = self.state.get_daily_log()
+            for op in scanned_operators:
+                # Check for active "Operator move" downtime for this operator
+                move_entry = None
+                for entry in reversed(log):  # Most recent first
+                    if (
+                        entry["operator"] == op
+                        and entry["event"] == "Operator move"
+                        and entry["status"] == "Live"
+                    ):
+                        move_entry = entry
+                        break
+                # If operator is in "Operator move" and is returning to the same station, end the downtime
+                if move_entry:
+                    self.state.stop_downtime([op])
+                # Assign operator to the new station
+                self.operator_station_map.set(op, station)
+            modal.destroy()
+            op_str = "\n".join(scanned_operators)
+            messagebox.showinfo(
+                "Sign In Complete",
+                f"The following operators have signed in to {station}:\n{op_str}",
+            )
+            # Optionally, update UI display of signed-in operators
+
+        tk.Button(
+            modal,
+            text="Submit",
+            command=submit,
+            background="#5E5E5E",
+            foreground="#ffffff",
+        ).pack(pady=5)
+        center_top_popup(self.root, modal, width=400)
+
+    def on_sign_out(self):
+        modal = tk.Toplevel(self.root)
+        modal.title("Sign Out of Station")
+        modal.transient(self.root)
+        modal.grab_set()
+        modal.focus_set()
+
+        tk.Label(
+            modal,
+            text=f"Station: {self.selected_station.get()}",
+            font=("TkDefaultFont", 16),
+        ).pack(pady=5)
+
+        tk.Label(modal, text="Scan Operator IDs to sign out:").pack(pady=5)
+        entry_frame = tk.Frame(modal)
+        entry_frame.pack(pady=5)
+        operator_entry = tk.Entry(entry_frame, width=20)
+        operator_entry.grid(row=0, column=0, padx=5)
+        operator_entry.focus_set()
+
+        operator_listbox = tk.Listbox(modal, height=3, width=30)
+        operator_listbox.pack(pady=5)
+        operator_count = tk.Label(modal, text="No operators added.")
+        operator_count.pack(pady=5)
+
+        scanned_operators: List[str] = []
+
+        def update_operator_list():
+            operator_listbox.delete(0, tk.END)
+            for op in scanned_operators:
+                operator_listbox.insert(tk.END, op)
+
+        def add_operator():
+            op_id = operator_entry.get().strip()
+            if op_id in OPERATORS:
+                op_name = OPERATORS[op_id]
+                if op_name not in scanned_operators:
+                    scanned_operators.append(op_name)
+                    update_operator_list()
+                    operator_count.config(
+                        text=f"{len(scanned_operators)} operators added."
+                    )
+                else:
+                    messagebox.showwarning("Duplicate", f"{op_name} already scanned.")
+            else:
+                messagebox.showerror(
+                    "Invalid Operator", f"ID '{op_id}' not recognized."
+                )
+            operator_entry.delete(0, tk.END)
+            operator_entry.focus_set()
+
+        operator_entry.bind("<Return>", lambda event: add_operator())
+
+        def submit():
+            if not scanned_operators:
+                messagebox.showerror(
+                    "Missing Operators", "Please scan at least one operator."
+                )
+                return
+            for op in scanned_operators:
+                self.operator_station_map.remove(op)
+            modal.destroy()
+            op_str = "\n".join(scanned_operators)
+            messagebox.showinfo(
+                "Sign Out Complete",
+                f"The following operators have signed out:\n{op_str}",
+            )
+            # Optionally, update UI display of signed-in operators
+
+        tk.Button(
+            modal,
+            text="Submit",
+            command=submit,
+            background="#5E5E5E",
+            foreground="#ffffff",
+        ).pack(pady=5)
+        center_top_popup(self.root, modal, width=400)
+
     def resize(self) -> None:
         self.root.update_idletasks()
         self.root.geometry("")
@@ -124,10 +330,8 @@ class DowntimeTrackerUI:
         entry_frame = tk.Frame(modal)
         entry_frame.pack(pady=5)
         operator_entry = tk.Entry(entry_frame, width=20)
-        operator_entry.grid(row=0, column=0, columnspan=2, padx=5)
+        operator_entry.grid(row=0, column=0, padx=5)
         operator_entry.focus_set()
-        # add_btn = tk.Button(entry_frame, text="Add", command=lambda: add_operator())
-        # add_btn.grid(row=0, column=1, padx=5)
 
         operator_listbox = tk.Listbox(modal, height=3, width=30)
         operator_listbox.pack(pady=5)
@@ -145,13 +349,6 @@ class DowntimeTrackerUI:
             op_id = operator_entry.get().strip()
             if op_id in OPERATORS:
                 op_name = OPERATORS[op_id]
-                # Check if operator is already in downtime (anywhere)
-                # if self.state.is_downtime_active(op_name):
-                #     messagebox.showerror(
-                #         "Already in Downtime",
-                #         f"{op_name} is already in a downtime and cannot be added to another.",
-                #     )
-                # el
                 if op_name not in scanned_operators:
                     scanned_operators.append(op_name)
                     update_operator_list()
@@ -195,43 +392,105 @@ class DowntimeTrackerUI:
             if not selected_event.get():
                 messagebox.showerror("Missing Event", "Please select a downtime event.")
                 return
-            # Final check before starting downtime
-            already_in_downtime = self.state.can_start_downtime(scanned_operators)
-            if already_in_downtime:
-                self.state.stop_downtime(already_in_downtime)
-                # Optionally, show info to user
-                op_str = "\n".join(already_in_downtime)
-                messagebox.showinfo(
-                    "Previous Downtime Ended",
-                    f"Previous downtime(s) for the following operator(s) were automatically ended: {op_str}",
-                )
-                for op in already_in_downtime:
-                    for dt in self.active_downtimes:
-                        if op in dt["operators"]:
-                            dt["operators"].remove(op)
-                self.active_downtimes = [
-                    dt for dt in self.active_downtimes if dt["operators"]
-                ]
+            # already_in_downtime = self.state.can_start_downtime(scanned_operators)
+            # if already_in_downtime:
+            #     self.state.stop_downtime(already_in_downtime)
+            #     op_str = "\n".join(already_in_downtime)
+            #     messagebox.showinfo(
+            #         "Previous Downtime Ended",
+            #         f"Previous downtime(s) for the following operator(s) were automatically ended: \n{op_str}",
+            #     )
+            #     for op in already_in_downtime:
+            #         for dt in self.active_downtimes:
+            #             if op in dt["operators"]:
+            #                 dt["operators"].remove(op)
+            #     self.active_downtimes = [
+            #         dt for dt in self.active_downtimes if dt["operators"]
+            #     ]
 
             event = selected_event.get()
 
             operator_station = {}
             if event == "Operator move":
-                # Remove operator from map for Operator Move
+                # Check if any operator is not signed in
+                not_signed_in = [
+                    op
+                    for op in scanned_operators
+                    if self.operator_station_map.get(op) == "Unknown"
+                ]
+                if not_signed_in:
+                    op_str = "\n".join(not_signed_in)
+                    messagebox.showerror(
+                        "Operator Not Signed In",
+                        f"The following operator(s) must be signed in to log movement:\n{op_str}",
+                    )
+                    return
+
+                already_in_downtime = self.state.can_start_downtime(scanned_operators)
+                if already_in_downtime:
+                    self.state.stop_downtime(already_in_downtime)
+                    op_str = "\n".join(already_in_downtime)
+                    messagebox.showinfo(
+                        "Previous Downtime Ended",
+                        f"Previous downtime(s) for the following operator(s) were automatically ended: \n{op_str}",
+                    )
+                    for op in already_in_downtime:
+                        for dt in self.active_downtimes:
+                            if op in dt["operators"]:
+                                dt["operators"].remove(op)
+                    self.active_downtimes = [
+                        dt for dt in self.active_downtimes if dt["operators"]
+                    ]
+                # Remove operator from map for Operator Move, and record previous station
                 for op in scanned_operators:
-                    operator_station[op] = self.operator_station_map.get(op)
+                    prev_station = self.operator_station_map.get(op)
+                    operator_station[op] = prev_station
                     self.operator_station_map.remove(op)
+                # Start downtime for 'Operator move'
+                for op, prev_station in operator_station.items():
+                    # You may need to update your logger/state to accept extra fields
+                    self.state.start_downtime(prev_station, event, [op])
+                    self.active_downtimes.append(
+                        {
+                            "station": prev_station,
+                            "event": event,
+                            "operators": [op],
+                        }
+                    )
+                modal.destroy()
+                op_str = "\n".join(scanned_operators)
+                messagebox.showinfo(
+                    "Downtime Started",
+                    f"Downtime '{event}' started for: \n{op_str}.",
+                )
+                self._load_active_downtimes_from_log()
+                self.log_frame.update_log_display()
+                return
+
             else:
+                already_in_downtime = self.state.can_start_downtime(scanned_operators)
+                if already_in_downtime:
+                    self.state.stop_downtime(already_in_downtime)
+                    op_str = "\n".join(already_in_downtime)
+                    messagebox.showinfo(
+                        "Previous Downtime Ended",
+                        f"Previous downtime(s) for the following operator(s) were automatically ended: \n{op_str}",
+                    )
+                    for op in already_in_downtime:
+                        for dt in self.active_downtimes:
+                            if op in dt["operators"]:
+                                dt["operators"].remove(op)
+                    self.active_downtimes = [
+                        dt for dt in self.active_downtimes if dt["operators"]
+                    ]
                 for op in scanned_operators:
                     # If not mapped, add to map with current station
-                    if self.operator_station_map.get(op) is None:
+                    if self.operator_station_map.get(op) == "Unknown":
                         self.operator_station_map.set(op, self.selected_station.get())
-                    # Use the mapped station (new or existing)
                     operator_station[op] = self.operator_station_map.get(op)
 
             for op, station in operator_station.items():
                 self.state.start_downtime(station, event, [op])
-                # Track this downtime in the UI
                 self.active_downtimes.append(
                     {
                         "station": station,
@@ -243,8 +502,9 @@ class DowntimeTrackerUI:
             op_str = "\n".join(scanned_operators)
             messagebox.showinfo(
                 "Downtime Started",
-                f"Downtime '{event}' started for {op_str}.",
+                f"Downtime '{event}' started for: \n{op_str}.",
             )
+            self._load_active_downtimes_from_log()
             self.log_frame.update_log_display()
 
         tk.Button(
@@ -255,6 +515,15 @@ class DowntimeTrackerUI:
             foreground="#ffffff",
         ).pack(pady=5)
         center_top_popup(self.root, modal, width=400)
+
+    def _schedule_new_day_check(self):
+        """Schedules a periodic check to clear the map if a new day has started."""
+        self.operator_station_map.daily_clear_if_needed()
+        # Check again in 30 minutes (1800000 ms)
+        self.root.after(1800000, self._schedule_new_day_check)
+
+    def clear_map(self) -> None:
+        self.operator_station_map.clear()
 
     def on_stop_downtime(self) -> None:
         # If there are no active downtimes, nothing to stop
@@ -334,14 +603,15 @@ class DowntimeTrackerUI:
                 for dt in self.active_downtimes:
                     if op in dt["operators"]:
                         dt["operators"].remove(op)
-            modal.destroy()
-            op_str = "\n".join(scanned_operators)
-            messagebox.showinfo("Downtime Ended", f"Downtime ended for {op_str}.")
             # Optionally, remove empty downtime records from self.active_downtimes
             self.active_downtimes = [
                 dt for dt in self.active_downtimes if dt["operators"]
             ]
+            modal.destroy()
+            op_str = "\n".join(scanned_operators)
+            messagebox.showinfo("Downtime Ended", f"Downtime ended for \n{op_str}.")
             # No need to disable STOP button; user can always try to stop more, or see warning if none left
+            self._load_active_downtimes_from_log()
             self.log_frame.update_log_display()
 
         tk.Button(

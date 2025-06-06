@@ -4,7 +4,7 @@ import sys
 import os
 
 
-def parse_station_info_file() -> tuple[list[str], str]:
+def parse_station_info_file():
     """Parses config.txt to extract station names and log directory."""
     possible_paths = [
         Path("../StationInfo/config.txt"),
@@ -50,8 +50,11 @@ EVENTS = {
     "Preparation": "Production",
     "Meeting": "Production",
     "Training": "Production",
-    "No material": "Production",
+    "No material from stores": "Inventory",
+    "No material from production": "Production",
+    "Housekeeping": "Production",
     "Micro stoppage (Minor adjustment)": "Production",
+    "Stock count": "Inventory",
     "Rework/Quality problems": "Quality",
     "Breakdown involving maintenance": "Maintenance",
     "Breakdown involving operation": "Maintenance",

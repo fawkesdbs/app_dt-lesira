@@ -65,7 +65,7 @@ class CollapsibleLogFrame(ttk.Frame):
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
         self.tree_frame.grid_remove()
-
+        
         self.tree.tag_configure("ended", background="#e5e5ff")
         self.tree.tag_configure("live", foreground="#042f04", background="#e5ffe5")
         self.tree.tag_configure("ended", background="#fffd6a")
@@ -107,7 +107,7 @@ class CollapsibleLogFrame(ttk.Frame):
 
         if log:
             last = log[-1]
-            summary = f"{last['timestamp'].strftime('%H:%M:%S')} | {last["event"]} ({last["operator"]})"
+            summary = f"{last['timestamp'].strftime('%H:%M:%S')} | {last['event']} ({last['operator']})"
         else:
             summary = "No downtimes logged today."
 
@@ -132,7 +132,7 @@ class CollapsibleLogFrame(ttk.Frame):
                         entry["operator"],
                         entry["status"],
                     ),
-                    tags=(tag,) if tag else (),
+                    tags=(tag,),
                 )
             self.autosize_columns()
 
@@ -191,13 +191,7 @@ class DowntimeEventSelector:
 
         self.listbox.bind("<Double-Button-1>", self._on_select)
 
-        # tk.Button(
-        #     self.window,
-        #     text="Select",
-        #     command=self._on_select,
-        #     background="#5E5E5E",
-        #     foreground="#ffffff",
-        # ).pack(pady=5)
+        # tk.Button(self.window, text="Select", command=self._on_select).pack(pady=5)
 
     def _on_select(self, event=None):
         selection = self.listbox.curselection()
