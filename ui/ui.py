@@ -4,11 +4,11 @@ from tkinter import messagebox, ttk
 from collections import defaultdict
 import datetime
 from typing import Dict, List, Callable, Optional
-from .config import log_dir_path, station_names, EVENTS, OPERATORS
-from .components import CollapsibleLogFrame, DowntimeEventSelector
-from .state import AppState
-from .logger import OperatorStationMap
-from .time_sync import TimeSync
+from ..core.config import log_dir_path, station_names, EVENTS, OPERATORS
+from .components.components import CollapsibleLogFrame, DowntimeEventSelector
+from ..core.state import AppState
+from ..core.logger import OperatorStationMap
+from ..core.time_sync import TimeSync
 
 
 def center_top_popup(parent: tk.Tk, popup: tk.Toplevel, width=400, y_offset=0):

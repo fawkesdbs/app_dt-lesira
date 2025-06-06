@@ -4,7 +4,6 @@ import uuid
 from pathlib import Path
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional
-from filelock import FileLock, Timeout
 from .config import EVENTS
 from .time_sync import TimeSync
 
@@ -27,10 +26,8 @@ class DowntimeLogger:
 
     def load_log(self, date_str: str) -> List[Dict[str, Any]]:
         path: Path = self.get_log_path(date_str)
-        # lock_path: Path = self.get_lock_path(date_str)
         if path.exists():
             try:
-                # with FileLock(str(lock_path), timeout=5):
                 with path.open("r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
@@ -40,15 +37,9 @@ class DowntimeLogger:
 
     def save_log(self, log_data: List[Dict[str, Any]], date_str: str) -> None:
         path: Path = self.get_log_path(date_str)
-        # lock_path: Path = self.get_lock_path(date_str)
         try:
-            # with FileLock(str(lock_path), timeout=5):
             with path.open("w", encoding="utf-8") as f:
                 json.dump(log_data, f, indent=2, ensure_ascii=False)
-        except Timeout:
-            print(
-                f"[DowntimeLogger] Could not acquire file lock for saving log {date_str}."
-            )
         except Exception as e:
             print(f"[DowntimeLogger] Failed to save log: {e}")
 
@@ -59,10 +50,8 @@ class DowntimeLogger:
         operators: List[str],
         downtime: str,
     ) -> List[str]:
-        # lock_path: Path = self.get_lock_path(date_str)
         ids: List[str] = []
         try:
-            # with FileLock(str(lock_path), timeout=5):
             log_data: List[Dict[str, Any]] = self.load_log(date_str)
             now: str = self.get_now().isoformat()
             category: str = EVENTS[downtime]
@@ -85,10 +74,6 @@ class DowntimeLogger:
                 log_data.append(log_entry)
 
             self.save_log(log_data, date_str)
-        except Timeout:
-            print(
-                f"[DowntimeLogger] Could not acquire file lock for logging downtime start on {date_str}."
-            )
         except Exception as e:
             print(f"[DowntimeLogger] Failed to log downtime start: {e}")
         return ids
@@ -98,10 +83,8 @@ class DowntimeLogger:
         date_str: str,
         downtime_ids: List[str],
     ) -> List[str]:
-        # lock_path: Path = self.get_lock_path(date_str)
         updated_ids: List[str] = []
         try:
-            # with FileLock(str(lock_path), timeout=5):
             log_data: List[Dict[str, Any]] = self.load_log(date_str)
             now: datetime = self.get_now()
 
@@ -120,10 +103,6 @@ class DowntimeLogger:
 
             if updated_ids:
                 self.save_log(log_data, date_str)
-        except Timeout:
-            print(
-                f"[DowntimeLogger] Could not acquire file lock for logging downtime stop on {date_str}."
-            )
         except Exception as e:
             print(f"[DowntimeLogger] Failed to log downtime stop: {e}")
         return updated_ids
@@ -137,11 +116,9 @@ class OperatorStationMap:
         time_sync: Optional[TimeSync] = None,
     ):
         self.file_path = os.path.join(log_dir_path, filename)
-        # self.lock_path = self.file_path + ".lock"
         self.last_cleared_file = os.path.join(
             log_dir_path, "operator_station_map_last_cleared.txt"
         )
-        # self.clear_lock_path = self.last_cleared_file + ".lock"
         self._map: Dict[str, str] = {}
         self.time_sync = time_sync
         self._load()
@@ -163,8 +140,6 @@ class OperatorStationMap:
         else:
             self._map = {}
 
-        # print(f"[OperatorStationMap] Mapping on load: {self._map}")
-
     def _save(self):
         try:
             with open(self.file_path, "w", encoding="utf-8") as f:
@@ -173,14 +148,11 @@ class OperatorStationMap:
             print(f"[OperatorStationMap] Failed to save: {e}")
 
     def set(self, operator: str, station: str):
-        # with FileLock(self.lock_path, timeout=5):
         self._load()
         self._map[operator] = station
-        # print(f"[OperatorStationMap] Mapping on set: {self._map}")
         self._save()
 
     def get(self, operator: str) -> Optional[str]:
-        # with FileLock(self.lock_path, timeout=5):
         self._load()
         print(
             f"[OperatorStationMap] Mapping on get: {operator} | {self._map.get(operator, 'Unknown')}"
@@ -188,21 +160,17 @@ class OperatorStationMap:
         return self._map.get(operator, "Unknown")
 
     def remove(self, operator: str):
-        # with FileLock(self.lock_path, timeout=5):
         self._load()
         if operator in self._map:
             del self._map[operator]
-            # print(f"[OperatorStationMap] Mapping on remove: {self._map}")
             self._save()
 
     def as_dict(self) -> Dict[str, str]:
-        # with FileLock(self.lock_path, timeout=5):
         self._load()
         return dict(self._map)
 
     def clear(self):
         self._map = {}
-        # print(f"[OperatorStationMap] Mapping on clear: {self._map}")
         self._save()
 
     def _get_last_cleared_date(self) -> Optional[date]:
@@ -228,8 +196,6 @@ class OperatorStationMap:
         This method is safe for multi-user/multi-device environments.
         """
         today = self._get_today()
-        # Lock both the map and the last_cleared file to avoid race conditions
-        # with FileLock(self.clear_lock_path, timeout=5):
         last_cleared = self._get_last_cleared_date()
         if last_cleared != today:
             self.clear()

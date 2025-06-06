@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, font
-from .state import AppState
+from ...core.state import AppState
 from collections import defaultdict
 from typing import Dict, Callable
 
@@ -65,7 +65,7 @@ class CollapsibleLogFrame(ttk.Frame):
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
         self.tree_frame.grid_remove()
-        
+
         self.tree.tag_configure("ended", background="#e5e5ff")
         self.tree.tag_configure("live", foreground="#042f04", background="#e5ffe5")
         self.tree.tag_configure("ended", background="#fffd6a")

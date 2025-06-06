@@ -1,5 +1,6 @@
 import tkinter as tk
-from dev import ui, config, state, logger, time_sync
+from core import config, logger, state, time_sync
+from ui import ui
 
 
 def launch_app():

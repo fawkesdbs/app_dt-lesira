@@ -1,2 +1,7 @@
 */__pycache__/
+__pycache__/
 .qodo/
+venv.12/
+venv.8/
+get_modules.py
+*.stackdump
