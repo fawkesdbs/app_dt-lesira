@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from .logger import DowntimeLogger
+from .downtime_logger import DowntimeLogger
 
 
 class AppState:
