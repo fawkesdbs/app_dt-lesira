@@ -1,3 +1,11 @@
+"""Configuration utilities for station info, logging, events, and operator data.
+
+This module provides functions and constants for parsing station configuration,
+setting up log directories, mapping event categories, and loading operator data
+from CSV files. It is intended to be imported and used by other modules in the
+application.
+"""
+
 from pathlib import Path
 import csv
 import sys
@@ -5,7 +13,15 @@ import os
 
 
 def parse_station_info_file():
-    """Parses config.txt to extract station names and log directory."""
+    """
+    Parse the station configuration file to extract station names and log directory.
+
+    Searches for 'config.txt' in possible locations, reads its contents, and extracts
+    station names and the log directory path based on section headers.
+
+    Returns:
+        tuple[list[str], str]: A tuple containing a list of station names and the log directory path.
+    """
     possible_paths = [
         Path("../StationInfo/config.txt"),
         Path.cwd() / "config.txt",
@@ -68,7 +84,15 @@ EVENTS = {
 
 
 def resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller"""
+    """
+    Get the absolute path to a resource, compatible with development and PyInstaller.
+
+    Args:
+        relative_path (str): The relative path to the resource.
+
+    Returns:
+        str: The absolute path to the resource.
+    """
     try:
         base_path = sys._MEIPASS
     except AttributeError:

@@ -4,12 +4,36 @@ from typing import Dict, Callable
 
 
 class DowntimeEventSelector:
+    """
+    A modal dialog for selecting a downtime event from a categorized list.
+
+    This class creates a popup window with a listbox, grouping events by category,
+    and allows the user to select an event. The selected event is returned via a callback.
+
+    :param master: The parent Tkinter root window.
+    :type master: tk.Tk
+    :param events: A dictionary mapping event names to their categories.
+    :type events: Dict[str, list]
+    :param callback: A function to call with the selected event string.
+    :type callback: Callable[[str], None]
+    """
+
     def __init__(
         self,
         master: tk.Tk,
         events: Dict[str, list],
         callback: Callable[[str], None],
     ):
+        """
+        Initialize the DowntimeEventSelector.
+
+        :param master: The parent Tkinter root window.
+        :type master: tk.Tk
+        :param events: A dictionary mapping event names to their categories.
+        :type events: Dict[str, list]
+        :param callback: A function to call with the selected event string.
+        :type callback: Callable[[str], None]
+        """
         self.master = master
         self.events = events
         self.callback = callback
@@ -17,12 +41,24 @@ class DowntimeEventSelector:
         self._build_selector()
 
     def _group_events(self) -> Dict[str, list]:
+        """
+        Group events by their category.
+
+        :return: A dictionary mapping category names to lists of event names.
+        :rtype: Dict[str, list]
+        """
         grouped = defaultdict(list)
         for event, category in self.events.items():
             grouped[category].append(event)
         return grouped
 
     def _build_selector(self):
+        """
+        Build and display the event selector popup window.
+
+        This method creates the Toplevel window, positions it, and populates the listbox
+        with categorized events.
+        """
         self.window = tk.Toplevel(self.master)
         self.master.update_idletasks()
         width = 400
@@ -60,6 +96,15 @@ class DowntimeEventSelector:
         # tk.Button(self.window, text="Select", command=self._on_select).pack(pady=5)
 
     def _on_select(self, event=None):
+        """
+        Handle the selection of an event from the listbox.
+
+        If a valid event is selected, the popup is closed and the callback is called
+        with the selected event string.
+
+        :param event: The Tkinter event object (optional).
+        :type event: tk.Event, optional
+        """
         selection = self.listbox.curselection()
         if not selection:
             return

@@ -21,9 +21,33 @@ from .helpers import (
 
 
 class DowntimeTrackerUI:
+    """
+    Main UI class for the Downtime Tracker application.
+
+    This class manages the main window, event handling, operator sign-in/out,
+    downtime logging, and summary popups.
+
+    :param root: The root Tkinter window.
+    :type root: tk.Tk
+    :param app_state: The application state object for downtime tracking.
+    :type app_state: AppState
+    :param time_sync: Optional time synchronization utility.
+    :type time_sync: Optional[TimeSync]
+    """
+
     def __init__(
         self, root: tk.Tk, app_state: AppState, time_sync: Optional[TimeSync] = None
     ):
+        """
+        Initialize the DowntimeTrackerUI.
+
+        :param root: The root Tkinter window.
+        :type root: tk.Tk
+        :param app_state: The application state object for downtime tracking.
+        :type app_state: AppState
+        :param time_sync: Optional time synchronization utility.
+        :type time_sync: Optional[TimeSync]
+        """
         self.root = root
         self.state = app_state
         self.time_sync = time_sync
@@ -42,6 +66,9 @@ class DowntimeTrackerUI:
         self._schedule_new_day_check()
 
     def _setup_ui(self) -> None:
+        """
+        Set up the main UI layout, widgets, and event bindings.
+        """
         self.root.title("Downtime Tracker")
         self.root.resizable(False, False)
         self.width = 510
@@ -121,13 +148,16 @@ class DowntimeTrackerUI:
         self.root.geometry(f"{self.width}x{self.root.winfo_height()}+{self.x}+{self.y}")
 
     def _schedule_new_day_check(self):
-        """Schedules a periodic check to clear the map if a new day has started."""
+        """
+        Schedule a periodic check to clear the operator-station map if a new day has started.
+        """
         self.operator_station_map.daily_clear_if_needed()
         self.root.after(1800000, self._schedule_new_day_check)
 
     def _load_active_downtimes_from_log(self):
         """
-        Populate self.active_downtimes from open log entries (end_time is None).
+        Populate self.active_downtimes from open log entries (where end_time is None).
+
         This ensures UI state matches persisted state after app restart.
         """
         log_entries = self.state.get_daily_log()
@@ -147,9 +177,15 @@ class DowntimeTrackerUI:
         self.active_downtimes = list(open_downtimes.values())
 
     def clear_map(self) -> None:
+        """
+        Clear all operator-station assignments.
+        """
         self.operator_station_map.clear()
 
     def on_sign_in(self):
+        """
+        Handle the operator sign-in process, including scanning operator IDs and updating the map.
+        """
         modal = make_modal(self.root, "Sign In to Station")
 
         tk.Label(
@@ -183,6 +219,9 @@ class DowntimeTrackerUI:
         operator_entry.bind("<Return>", lambda event: add_operator())
 
         def submit():
+            """
+            Submit the sign-in form, updating the operator-station map and closing any open 'Operator move' downtimes.
+            """
             if not scanned_operators:
                 show_error("Missing Operators", "Please scan at least one operator.")
                 return
@@ -215,6 +254,9 @@ class DowntimeTrackerUI:
         center_top_popup(self.root, modal, width=400)
 
     def on_sign_out(self):
+        """
+        Handle the operator sign-out process, including scanning operator IDs and updating the map.
+        """
         modal = make_modal(self.root, "Sign Out of Station")
 
         tk.Label(
@@ -247,6 +289,9 @@ class DowntimeTrackerUI:
         operator_entry.bind("<Return>", lambda event: add_operator())
 
         def submit():
+            """
+            Submit the sign-out form, removing operators from the map.
+            """
             if not scanned_operators:
                 show_error("Missing Operators", "Please scan at least one operator.")
                 return
@@ -269,6 +314,9 @@ class DowntimeTrackerUI:
         center_top_popup(self.root, modal, width=400)
 
     def on_start_downtime(self) -> None:
+        """
+        Handle the process of starting a downtime event, including operator scanning and event selection.
+        """
         modal = make_modal(self.root, "Start Downtime")
 
         tk.Label(
@@ -317,6 +365,9 @@ class DowntimeTrackerUI:
         ).pack(pady=5)
 
         def submit():
+            """
+            Submit the downtime start form, handling operator moves and event logging.
+            """
             if not scanned_operators:
                 show_error("Missing Operators", "Please scan at least one operator.")
                 return
@@ -431,6 +482,11 @@ class DowntimeTrackerUI:
         center_top_popup(self.root, modal, width=400)
 
     def on_stop_downtime(self) -> None:
+        """
+        Handle the process of stopping downtime for scanned operators.
+
+        :return: None
+        """
         # If there are no active downtimes, nothing to stop
         if not self.active_downtimes or all(
             len(dt["operators"]) == 0 for dt in self.active_downtimes
@@ -466,6 +522,9 @@ class DowntimeTrackerUI:
         operator_entry.bind("<Return>", lambda event: add_operator())
 
         def submit():
+            """
+            Submit the downtime stop form, ending downtime for scanned operators.
+            """
             if not scanned_operators:
                 show_error("Missing Operators", "Please scan at least one operator.")
                 return
@@ -497,6 +556,9 @@ class DowntimeTrackerUI:
         center_top_popup(self.root, modal, width=400)
 
     def show_operator_summary_popup(self):
+        """
+        Show a popup window summarizing total downtime minutes per operator for the current day.
+        """
         log = self.state.get_daily_log()
         operator_minutes = defaultdict(float)
         operator_counts = defaultdict(int)
@@ -545,5 +607,8 @@ class DowntimeTrackerUI:
         center_top_popup(self.root, popup, width=400)
 
     def resize(self) -> None:
+        """
+        Resize the main window to fit its contents
+        """
         self.root.update_idletasks()
         self.root.geometry("")

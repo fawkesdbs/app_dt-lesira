@@ -4,7 +4,34 @@ from core.app_state import AppState
 
 
 class CollapsibleLogFrame(ttk.Frame):
+    """
+    A collapsible frame widget for displaying and toggling a daily downtime log.
+
+    This frame provides a summary of the most recent downtime event and allows
+    the user to expand or collapse a detailed log view in a Treeview widget.
+    The log is filtered by the selected station if available.
+
+    :param parent: The parent Tkinter widget.
+    :type parent: tk.Tk
+    :param state: The application state object for downtime tracking.
+    :type state: AppState
+    :param app_ui: The main application UI object, used for resizing and station selection.
+    :type app_ui: object
+    :param kwargs: Additional keyword arguments for ttk.Frame.
+    """
+
     def __init__(self, parent: tk.Tk, state: AppState, app_ui, **kwargs):
+        """
+        Initialize the CollapsibleLogFrame.
+
+        :param parent: The parent Tkinter widget.
+        :type parent: tk.Tk
+        :param state: The application state object for downtime tracking.
+        :type state: AppState
+        :param app_ui: The main application UI object, used for resizing and station selection.
+        :type app_ui: object
+        :param kwargs: Additional keyword arguments for ttk.Frame.
+        """
         grid_row = kwargs.pop("grid_row", 0)
         grid_column = kwargs.pop("grid_column", 0)
 
@@ -70,18 +97,13 @@ class CollapsibleLogFrame(ttk.Frame):
 
         self.update_log_display()
 
-    def autosize_columns(self):
-        for col in self.tree["columns"]:
-            # max_width = font.Font().measure(col)
-
-            # for item in self.tree.get_children():
-            #     cell_value = str(self.tree.set(item, col))
-            #     cell_width = font.Font().measure(cell_value)
-            #     max_width = max(max_width, cell_width)
-
-            self.tree.column(col, width=100)
-
     def toggle(self):
+        """
+        Toggle the expanded/collapsed state of the log frame.
+
+        Expands the Treeview to show the full log if collapsed, or hides it if expanded.
+        Also updates the toggle button text and triggers a UI resize.
+        """
         self.expanded = not self.expanded
         if self.expanded:
             self.toggle_btn.config(text="▲ Hide Full Log")
@@ -96,6 +118,12 @@ class CollapsibleLogFrame(ttk.Frame):
         self.app_ui.resize()
 
     def update_log_display(self):
+        """
+        Update the summary label and Treeview with the latest downtime log entries.
+
+        Filters the log by the selected station if available, updates the summary label
+        with the most recent event, and populates the Treeview if expanded.
+        """
         selected_station = None
         if hasattr(self.app_ui, "selected_station"):
             selected_station = self.app_ui.selected_station.get()
@@ -132,4 +160,3 @@ class CollapsibleLogFrame(ttk.Frame):
                     ),
                     tags=(tag,),
                 )
-            self.autosize_columns()

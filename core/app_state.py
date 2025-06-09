@@ -6,18 +6,30 @@ from .downtime_logger import DowntimeLogger
 class AppState:
     """
     Application state for downtime tracking.
-    Ensures each operator can only be in one downtime at a time,
-    but allows multiple concurrent downtimes for different stations/events.
+
+    This class manages the state of operator downtimes, ensuring that each operator
+    can only be in one downtime at a time, but allows multiple concurrent downtimes
+    for different stations or events. It interacts with a DowntimeLogger to persist
+    and retrieve downtime events.
     """
 
     def __init__(self, logger: DowntimeLogger):
+        """
+        Initialize the AppState.
+
+        Args:
+            logger (DowntimeLogger): The logger instance used for downtime event persistence.
+        """
         self.logger: DowntimeLogger = logger
         # Maps operator name to their current active downtime info
         self.active_downtimes: Dict[str, Dict[str, Optional[str]]] = {}
 
-    def load_active_downtimes_from_log(self):
+    def load_active_downtimes_from_log(self) -> None:
         """
         On startup, scan today's log for open downtimes and populate self.active_downtimes.
+
+        This ensures that the application state is consistent with persisted logs,
+        restoring any active downtimes that were not closed in a previous session.
         """
         now: datetime = self.logger.get_now()
         date_str: str = now.strftime("%Y-%m-%d")
@@ -35,20 +47,39 @@ class AppState:
     def can_start_downtime(self, operators: List[str]) -> List[str]:
         """
         Returns a list of operators from the input who are already in an active downtime.
+
         Used to prevent an operator from being in multiple downtimes at once.
+
+        Args:
+            operators (List[str]): List of operator names to check.
+
+        Returns:
+            List[str]: Operators who are already in an active downtime.
         """
         return [op for op in operators if op in self.active_downtimes]
 
     def is_downtime_active(self, operator: str) -> bool:
         """
         Returns True if the operator is currently in an active downtime.
+
+        Args:
+            operator (str): The operator name.
+
+        Returns:
+            bool: True if the operator is in an active downtime, False otherwise.
         """
         return operator in self.active_downtimes
 
     def start_downtime(self, station: str, reason: str, operators: List[str]) -> None:
         """
         Starts a downtime for the given station, reason, and list of operators.
+
         Only operators not already in downtime should be passed in.
+
+        Args:
+            station (str): The station where downtime is being logged.
+            reason (str): The reason/event for the downtime.
+            operators (List[str]): List of operator names to start downtime for.
         """
         now: datetime = self.logger.get_now()
         date_str: str = now.strftime("%Y-%m-%d")
@@ -65,7 +96,11 @@ class AppState:
     def stop_downtime(self, operators: List[str]) -> None:
         """
         Stops downtime for the given list of operators.
+
         Only operators currently in downtime should be passed in.
+
+        Args:
+            operators (List[str]): List of operator names to stop downtime for.
         """
         id_map: Dict[str, List[str]] = {}
 
@@ -86,6 +121,12 @@ class AppState:
     def get_daily_log(self) -> List[Dict[str, Any]]:
         """
         Returns a processed list of today's downtime log entries.
+
+        Each entry includes timestamp, category, event, operator, station,
+        end time, duration, and status.
+
+        :return: List of processed downtime log entries for today.
+        :rtype: List[Dict[str, Any]]
         """
         now: datetime = self.logger.get_now()
         date_str: str = now.strftime("%Y-%m-%d")
