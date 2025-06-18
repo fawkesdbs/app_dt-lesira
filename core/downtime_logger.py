@@ -1,5 +1,6 @@
 import json
 import uuid
+import requests
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -17,7 +18,12 @@ class DowntimeLogger:
         time_sync (Optional[TimeSync]): Optional time synchronization utility.
     """
 
-    def __init__(self, log_dir: Path, time_sync: Optional[TimeSync] = None):
+    def __init__(
+        self,
+        log_dir: Path,
+        time_sync: Optional[TimeSync] = None,
+        server_url: Optional[str] = None,
+    ):
         """
         Initialize the DowntimeLogger.
 
@@ -25,8 +31,9 @@ class DowntimeLogger:
             log_dir (str): Path to the directory where logs will be stored.
             time_sync (Optional[TimeSync]): Optional time synchronization utility.
         """
-        self.log_dir: Path = log_dir
-        self.time_sync: Optional[TimeSync] = time_sync
+        self.log_dir = log_dir
+        self.time_sync = time_sync
+        self.server_url = server_url
 
     def get_log_path(self, date_str: str) -> Path:
         """
@@ -61,17 +68,31 @@ class DowntimeLogger:
         :return: List of log entries for the date.
         :rtype: List[Dict[str, Any]]
         """
+        if self.server_url:
+            try:
+                resp = requests.get(
+                    f"{self.server_url}/log", params={"date": date_str}, timeout=10
+                )
+                resp.raise_for_status()
+                logs = resp.json()
+                if isinstance(logs, list):
+                    return logs
+                print(f"[DowntimeLogger] Unexpected server response format for logs")
+            except Exception as e:
+                print(f"[DowntimeLogger] Failed to load logs from server: {e}")
+
         path: Path = self.get_log_path(date_str)
         if path.exists():
             try:
                 with path.open("r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
-                print(f"[DowntimeLogger] Failed to load log: {e}")
-                return []
+                print(f"[DowntimeLogger] Failed to load local log: {e}")
         return []
 
-    def save_log(self, log_data: List[Dict[str, Any]], date_str: str) -> None:
+    def save_log(
+        self, log_entries: List[Dict[str, Any]], date_str: str, mode: str = "append"
+    ) -> None:
         """
         Save the log data for a specific date.
 
@@ -79,12 +100,62 @@ class DowntimeLogger:
             log_data (List[Dict[str, Any]]): List of log entries to save.
             date_str (str): Date string in 'YYYY-MM-DD' format.
         """
-        path: Path = self.get_log_path(date_str)
-        try:
-            with path.open("w", encoding="utf-8") as f:
-                json.dump(log_data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"[DowntimeLogger] Failed to save log: {e}")
+        if mode not in ("append", "update"):
+            raise ValueError(f"Invalid mode {mode}, must be 'append' or 'update'")
+
+        if not log_entries:
+            return
+
+        if self.server_url:
+            for entry in log_entries:
+                try:
+                    if mode == "append":
+                        resp = requests.post(
+                            f"{self.server_url}/log", json=entry, timeout=10
+                        )
+                    else:
+                        entry_id = entry.get("id")
+                        if not entry_id:
+                            print(
+                                "[DowntimeLogger] Missing 'id' for update entry, skipping"
+                            )
+                            continue
+                        resp = requests.put(
+                            f"{self.server_url}/log/{entry_id}", json=entry, timeout=10
+                        )
+
+                    if resp.status_code != 200:
+                        print(
+                            f"[DowntimeLogger] Server rejected log entry: {resp.status_code} {resp.text}"
+                        )
+                except Exception as e:
+                    print(f"[DowntimeLogger] Failed to send log entry to server: {e}")
+
+        else:
+            path = self.get_log_path(date_str)
+            logs = []
+            if path.exists():
+                try:
+                    with path.open("r", encoding="utf-8") as f:
+                        logs = json.load(f)
+                except Exception as e:
+                    print(f"[DowntimeLogger] Failed to load local logs for saving: {e}")
+
+            if mode == "append":
+                logs.extend(log_entries)
+            else:
+                log_map = {entry.get("id"): entry for entry in logs if "id" in entry}
+                for entry in log_entries:
+                    eid = entry.get("id")
+                    if eid:
+                        log_map[eid] = entry
+                logs = list(log_map.values())
+
+            try:
+                with path.open("w", encoding="utf-8") as f:
+                    json.dump(logs, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"[DowntimeLogger] Failed to save local logs: {e}")
 
     def log_downtime_start(
         self,
@@ -107,15 +178,14 @@ class DowntimeLogger:
         """
         ids: List[str] = []
         try:
-            log_data: List[Dict[str, Any]] = self.load_log(date_str)
             now: str = self.get_now().isoformat()
-            category: str = EVENTS[downtime]
+            category: str = EVENTS.get(downtime, "Unknown")
 
             for operator in operators:
                 entry_id: str = str(uuid.uuid4())
                 ids.append(entry_id)
 
-                log_entry: Dict[str, Any] = {
+                entry = {
                     "id": entry_id,
                     "station": station,
                     "operator": operator,
@@ -125,10 +195,7 @@ class DowntimeLogger:
                     "end_time": None,
                     "duration_minutes": None,
                 }
-
-                log_data.append(log_entry)
-
-            self.save_log(log_data, date_str)
+                self.save_log([entry], date_str, mode="append")
         except Exception as e:
             print(f"[DowntimeLogger] Failed to log downtime start: {e}")
         return ids
@@ -153,21 +220,25 @@ class DowntimeLogger:
             log_data: List[Dict[str, Any]] = self.load_log(date_str)
             now: datetime = self.get_now()
 
-            for entry in log_data:
-                entry_id: str = entry.get("id", "")
-                if entry_id in downtime_ids and entry.get("end_time") is None:
-                    start_time_str: Optional[str] = entry.get("start_time")
+            log_map = {entry.get("id"): entry for entry in log_data if "id" in entry}
+
+            entries_to_update = []
+
+            for eid in downtime_ids:
+                entry = log_map.get(eid)
+                if entry and entry.get("end_time") is None:
+                    start_time_str = entry.get("start_time")
                     if not start_time_str:
                         continue
-
-                    start_time: datetime = datetime.fromisoformat(start_time_str)
-                    duration: float = (now - start_time).total_seconds() / 60
+                    start_time = datetime.fromisoformat(start_time_str)
+                    duration = (now - start_time).total_seconds() / 60
                     entry["end_time"] = now.isoformat()
                     entry["duration_minutes"] = round(duration, 2)
-                    updated_ids.append(entry_id)
+                    entries_to_update.append(entry)
+                    updated_ids.append(eid)
 
-            if updated_ids:
-                self.save_log(log_data, date_str)
+            if entries_to_update:
+                self.save_log(entries_to_update, date_str, mode="update")
         except Exception as e:
             print(f"[DowntimeLogger] Failed to log downtime stop: {e}")
         return updated_ids
