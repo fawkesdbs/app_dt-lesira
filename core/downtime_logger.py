@@ -17,7 +17,7 @@ class DowntimeLogger:
         time_sync (Optional[TimeSync]): Optional time synchronization utility.
     """
 
-    def __init__(self, log_dir: str, time_sync: Optional[TimeSync] = None):
+    def __init__(self, log_dir: Path, time_sync: Optional[TimeSync] = None):
         """
         Initialize the DowntimeLogger.
 
@@ -25,7 +25,7 @@ class DowntimeLogger:
             log_dir (str): Path to the directory where logs will be stored.
             time_sync (Optional[TimeSync]): Optional time synchronization utility.
         """
-        self.log_dir: Path = Path(log_dir)
+        self.log_dir: Path = log_dir
         self.time_sync: Optional[TimeSync] = time_sync
 
     def get_log_path(self, date_str: str) -> Path:

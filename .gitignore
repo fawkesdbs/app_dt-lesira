@@ -3,5 +3,10 @@ __pycache__/
 .qodo/
 venv.12/
 venv.8/
+dist.12/
+dist.8/
 get_modules.py
 *.stackdump
+build/
+main.spec
+server.py
