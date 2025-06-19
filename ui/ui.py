@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 from core.config import log_dir_path, station_names, EVENTS, OPERATORS
 from core.app_state import AppState
 from core.operator_station_map import OperatorStationMap
+from core.operator_movement_logger import OperatorMovementLogger
 from core.time_sync import TimeSync
 from .components.collapsible_log_frame import CollapsibleLogFrame
 from .components.downtime_event_selector import DowntimeEventSelector
@@ -17,6 +18,7 @@ from .helpers import (
     show_info,
     show_warning,
     make_operator_scanner,
+    show_operator_modal,
 )
 
 
@@ -57,9 +59,16 @@ class DowntimeTrackerUI:
         stations_dir = os.path.normpath(
             os.path.join(os.path.dirname(log_dir_path), "stations")
         )
+        movement_dir = os.path.normpath(
+            os.path.join(os.path.dirname(log_dir_path), "movement")
+        )
         os.makedirs(stations_dir, exist_ok=True)
+        os.makedirs(movement_dir, exist_ok=True)
         self.operator_station_map = OperatorStationMap(
             stations_dir, time_sync=self.time_sync
+        )
+        self.operator_movement_logger = OperatorMovementLogger(
+            movement_dir, self.time_sync
         )
         self._load_active_downtimes_from_log()
         self._setup_ui()
@@ -186,39 +195,8 @@ class DowntimeTrackerUI:
         """
         Handle the operator sign-in process, including scanning operator IDs and updating the map.
         """
-        modal = make_modal(self.root, "Sign In to Station")
 
-        tk.Label(
-            modal,
-            text=f"Station: {self.selected_station.get()}",
-            font=("TkDefaultFont", 16),
-        ).pack(pady=5)
-
-        tk.Label(modal, text="Scan Operator IDs to sign in:").pack(pady=5)
-        entry_frame = tk.Frame(modal)
-        entry_frame.pack(pady=5)
-        operator_entry = tk.Entry(entry_frame, width=20)
-        operator_entry.grid(row=0, column=0, padx=5)
-        operator_entry.focus_set()
-
-        operator_listbox = tk.Listbox(modal, height=3, width=30)
-        operator_listbox.pack(pady=5)
-        operator_count = tk.Label(modal, text="No operators added.")
-        operator_count.pack(pady=5)
-
-        scanned_operators: List[str] = []
-
-        add_operator = make_operator_scanner(
-            operator_entry,
-            operator_listbox,
-            operator_count,
-            scanned_operators,
-            OPERATORS,
-        )
-
-        operator_entry.bind("<Return>", lambda event: add_operator())
-
-        def submit():
+        def submit(scanned_operators: List[str], modal: tk.Toplevel):
             """
             Submit the sign-in form, updating the operator-station map and closing any open 'Operator move' downtimes.
             """
@@ -237,6 +215,7 @@ class DowntimeTrackerUI:
                         self.state.stop_downtime([op])
                         break
                 self.operator_station_map.set(op, station)
+                self.operator_movement_logger.log_event(op, station, state="Sign In")
             modal.destroy()
             op_str = "\n".join(scanned_operators)
             show_info(
@@ -244,51 +223,21 @@ class DowntimeTrackerUI:
                 f"The following operators have signed in to {station}:\n{op_str}",
             )
 
-        tk.Button(
-            modal,
-            text="Submit",
-            command=submit,
-            background="#5E5E5E",
-            foreground="#ffffff",
-        ).pack(pady=5)
-        center_top_popup(self.root, modal, width=400)
+        show_operator_modal(
+            self.root,
+            self.selected_station.get(),
+            "Sign In to Station",
+            "Scan Operator IDs to sign in:",
+            OPERATORS,
+            submit,
+        )
 
     def on_sign_out(self):
         """
         Handle the operator sign-out process, including scanning operator IDs and updating the map.
         """
-        modal = make_modal(self.root, "Sign Out of Station")
 
-        tk.Label(
-            modal,
-            text=f"Station: {self.selected_station.get()}",
-            font=("TkDefaultFont", 16),
-        ).pack(pady=5)
-
-        tk.Label(modal, text="Scan Operator IDs to sign out:").pack(pady=5)
-        entry_frame = tk.Frame(modal)
-        entry_frame.pack(pady=5)
-        operator_entry = tk.Entry(entry_frame, width=20)
-        operator_entry.grid(row=0, column=0, padx=5)
-        operator_entry.focus_set()
-
-        operator_listbox = tk.Listbox(modal, height=3, width=30)
-        operator_listbox.pack(pady=5)
-        operator_count = tk.Label(modal, text="No operators added.")
-        operator_count.pack(pady=5)
-
-        scanned_operators: List[str] = []
-
-        add_operator = make_operator_scanner(
-            operator_entry,
-            operator_listbox,
-            operator_count,
-            scanned_operators,
-            OPERATORS,
-        )
-        operator_entry.bind("<Return>", lambda event: add_operator())
-
-        def submit():
+        def submit(scanned_operators: List[str], modal: tk.Toplevel):
             """
             Submit the sign-out form, removing operators from the map.
             """
@@ -297,6 +246,9 @@ class DowntimeTrackerUI:
                 return
             for op in scanned_operators:
                 self.operator_station_map.remove(op)
+                self.operator_movement_logger.log_event(
+                    op, self.selected_station.get(), state="Sign Out"
+                )
             modal.destroy()
             op_str = "\n".join(scanned_operators)
             show_info(
@@ -304,14 +256,14 @@ class DowntimeTrackerUI:
                 f"The following operators have signed out:\n{op_str}",
             )
 
-        tk.Button(
-            modal,
-            text="Submit",
-            command=submit,
-            background="#5E5E5E",
-            foreground="#ffffff",
-        ).pack(pady=5)
-        center_top_popup(self.root, modal, width=400)
+        show_operator_modal(
+            self.root,
+            self.selected_station.get(),
+            "Sign Out to Station",
+            "Scan Operator IDs to sign out:",
+            OPERATORS,
+            submit,
+        )
 
     def on_start_downtime(self) -> None:
         """
@@ -375,6 +327,19 @@ class DowntimeTrackerUI:
                 show_error("Missing Event", "Please select a downtime event.")
                 return
 
+            not_signed_in = [
+                op
+                for op in scanned_operators
+                if self.operator_station_map.get(op) == "Unknown"
+            ]
+            if not_signed_in:
+                op_str = "\n".join(not_signed_in)
+                show_error(
+                    "Operator Not Signed In",
+                    f"The following operator(s) must be signed in to start downtime:\n{op_str}",
+                )
+                return
+
             event = selected_event.get()
             operator_station = {}
             if event == "Operator move":
@@ -411,6 +376,9 @@ class DowntimeTrackerUI:
                     prev_station = self.operator_station_map.get(op)
                     operator_station[op] = prev_station
                     self.operator_station_map.remove(op)
+                    self.operator_movement_logger.log_event(
+                        op, prev_station, state="Sign Out"
+                    )
                 # Start downtime for 'Operator move'
                 for op, prev_station in operator_station.items():
                     # You may need to update your logger/state to accept extra fields
@@ -494,34 +462,7 @@ class DowntimeTrackerUI:
             show_warning("No Active Downtime", "No downtime is currently active.")
             return
 
-        modal = make_modal(self.root, "Stop Downtime")
-
-        tk.Label(
-            modal, text="Scan Operator IDs to stop downtime:", font=("Arial", 12)
-        ).pack(pady=10)
-        entry_frame = tk.Frame(modal)
-        entry_frame.pack(pady=5)
-        operator_entry = tk.Entry(entry_frame, width=20)
-        operator_entry.grid(row=0, column=0, columnspan=2, padx=5)
-        operator_entry.focus_set()
-
-        operator_listbox = tk.Listbox(modal, height=3, width=30)
-        operator_listbox.pack(pady=5)
-        operator_count = tk.Label(modal, text="No operators added.")
-        operator_count.pack(pady=5)
-
-        scanned_operators: List[str] = []
-
-        add_operator = make_operator_scanner(
-            operator_entry,
-            operator_listbox,
-            operator_count,
-            scanned_operators,
-            OPERATORS,
-        )
-        operator_entry.bind("<Return>", lambda event: add_operator())
-
-        def submit():
+        def submit(scanned_operators: List[str], modal: tk.Toplevel):
             """
             Submit the downtime stop form, ending downtime for scanned operators.
             """
@@ -546,14 +487,14 @@ class DowntimeTrackerUI:
             self._load_active_downtimes_from_log()
             self.log_frame.update_log_display()
 
-        tk.Button(
-            modal,
-            text="Submit",
-            command=submit,
-            background="#5E5E5E",
-            foreground="#ffffff",
-        ).pack(pady=15)
-        center_top_popup(self.root, modal, width=400)
+        show_operator_modal(
+            self.root,
+            self.selected_station.get(),
+            "Stop Downtime",
+            "Scan Operator IDs to stop downtime:",
+            OPERATORS,
+            submit,
+        )
 
     def show_operator_summary_popup(self):
         """
