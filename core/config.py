@@ -54,12 +54,21 @@ def parse_station_info_file():
 
         break
 
-    return station_names or ["Unknown"], log_dir
+    # return station_names or ["Unknown"], log_dir
+    return station_names or ["Unknown"]
 
 
-station_names, log_dir_path = parse_station_info_file()
-log_dir = Path(log_dir_path)
-log_dir.mkdir(parents=True, exist_ok=True)
+# station_names, log_dir_path = parse_station_info_file()
+station_names = parse_station_info_file()
+# log_dir = Path(log_dir_path)
+# log_dir.mkdir(parents=True, exist_ok=True)
+
+db_config = {
+    "host": "localhost",
+    "user": "root",
+    "password": "newPassword",
+    "database": "downtime_tracker",
+}
 
 EVENTS = {
     "Operator move": "Production",

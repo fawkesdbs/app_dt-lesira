@@ -4,7 +4,7 @@ from tkinter import ttk
 from collections import defaultdict
 import datetime
 from typing import Dict, List, Optional
-from core.config import log_dir_path, station_names, EVENTS, OPERATORS
+from core.config import station_names, EVENTS, OPERATORS
 from core.app_state import AppState
 from core.operator_movement_logger import OperatorMovementLogger
 from core.time_sync import TimeSync
@@ -37,7 +37,11 @@ class DowntimeTrackerUI:
     """
 
     def __init__(
-        self, root: tk.Tk, app_state: AppState, time_sync: Optional[TimeSync] = None
+        self,
+        root: tk.Tk,
+        app_state: AppState,
+        operator_movement_logger: OperatorMovementLogger,
+        time_sync: Optional[TimeSync] = None,
     ):
         """
         Initialize the DowntimeTrackerUI.
@@ -55,14 +59,7 @@ class DowntimeTrackerUI:
         self.selected_station = tk.StringVar(value=station_names[0])
         self.active_downtimes: List[Dict] = []
         self.summary_popup = None
-        movement_dir = os.path.normpath(
-            os.path.join(os.path.dirname(log_dir_path), "movement")
-        )
-        os.makedirs(movement_dir, exist_ok=True)
-
-        self.operator_movement_logger = OperatorMovementLogger(
-            movement_dir, self.time_sync
-        )
+        self.operator_movement_logger = operator_movement_logger
         self._load_active_downtimes_from_log()
         self._setup_ui()
 
@@ -71,7 +68,6 @@ class DowntimeTrackerUI:
         Set up the main UI layout, widgets, and event bindings.
         """
         self.root.title("Downtime Tracker")
-        self.root.resizable(False, False)
         self.width = 510
         self.height = 270
 
@@ -181,6 +177,8 @@ class DowntimeTrackerUI:
                 return
             station = self.selected_station.get()
             log = self.state.get_daily_log()
+            skipped_ops = []
+            signed_ops = []
             for op in scanned_operators:
                 for entry in reversed(log):  # Most recent first
                     if (
@@ -190,13 +188,31 @@ class DowntimeTrackerUI:
                     ):
                         self.state.stop_downtime([op])
                         break
-                self.operator_movement_logger.log_event(op, station, state="Sign In")
+                result = self.operator_movement_logger.log_event(
+                    op, station, state="Sign In"
+                )
+                if result:
+                    signed_ops.append(op)
+                else:
+                    last_station = (
+                        self.operator_movement_logger.get_current_station_map().get(op)
+                    )
+                    skipped_ops.append(f"{op}: {last_station}")
             modal.destroy()
-            op_str = "\n".join(scanned_operators)
-            show_info(
-                "Sign In Complete",
-                f"The following operators have signed in to {station}:\n{op_str}",
-            )
+
+            if skipped_ops:
+                op_str = "\n".join(skipped_ops)
+                show_warning(
+                    "Already Signed In",
+                    f"The following operators were already signed in and were skipped:\n{op_str}",
+                )
+
+            if signed_ops:
+                op_str = "\n".join(signed_ops)
+                show_info(
+                    "Sign In Complete",
+                    f"The following operators have signed in to {station}:\n{op_str}",
+                )
 
         show_operator_modal(
             self.root,
@@ -305,7 +321,8 @@ class DowntimeTrackerUI:
             not_signed_in = [
                 op
                 for op in scanned_operators
-                if self.operator_station_map.get(op) == "Unknown"
+                if self.operator_movement_logger.get_current_station_map().get(op)
+                is None
             ]
             if not_signed_in:
                 op_str = "\n".join(not_signed_in)
@@ -318,19 +335,6 @@ class DowntimeTrackerUI:
             event = selected_event.get()
             operator_station = {}
             if event == "Operator move":
-                not_signed_in = [
-                    op
-                    for op in scanned_operators
-                    if self.operator_station_map.get(op) == "Unknown"
-                ]
-                if not_signed_in:
-                    op_str = "\n".join(not_signed_in)
-                    show_error(
-                        "Operator Not Signed In",
-                        f"The following operator(s) must be signed in to log movement:\n{op_str}",
-                    )
-                    return
-
                 already_in_downtime = self.state.can_start_downtime(scanned_operators)
                 if already_in_downtime:
                     self.state.stop_downtime(already_in_downtime)
@@ -348,9 +352,10 @@ class DowntimeTrackerUI:
                     ]
                 # Remove operator from map for Operator Move, and record previous station
                 for op in scanned_operators:
-                    prev_station = self.operator_station_map.get(op)
+                    prev_station = (
+                        self.operator_movement_logger.get_current_station_map().get(op)
+                    )
                     operator_station[op] = prev_station
-                    self.operator_station_map.remove(op)
                     self.operator_movement_logger.log_event(
                         op, prev_station, state="Sign Out"
                     )
@@ -392,10 +397,15 @@ class DowntimeTrackerUI:
                         dt for dt in self.active_downtimes if dt["operators"]
                     ]
                 for op in scanned_operators:
-                    # If not mapped, add to map with current station
-                    if self.operator_station_map.get(op) == "Unknown":
-                        self.operator_station_map.set(op, self.selected_station.get())
-                    operator_station[op] = self.operator_station_map.get(op)
+                    station = (
+                        self.operator_movement_logger.get_current_station_map().get(op)
+                    )
+                    if station is None:
+                        station = self.selected_station.get()
+                        self.operator_movement_logger.log_event(
+                            op, station, state="Sign In"
+                        )
+                    operator_station[op] = station
 
             for op, station in operator_station.items():
                 self.state.start_downtime(station, event, [op])

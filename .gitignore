@@ -10,3 +10,5 @@ get_modules.py
 build/
 main.spec
 server.py
+(deprecated)/
+utils/

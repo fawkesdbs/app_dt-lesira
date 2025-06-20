@@ -21,7 +21,6 @@ class AppState:
             logger (DowntimeLogger): The logger instance used for downtime event persistence.
         """
         self.logger: DowntimeLogger = logger
-        # Maps operator name to their current active downtime info
         self.active_downtimes: Dict[str, Dict[str, Optional[str]]] = {}
 
     def load_active_downtimes_from_log(self) -> None:
@@ -34,6 +33,7 @@ class AppState:
         now: datetime = self.logger.get_now()
         date_str: str = now.strftime("%Y-%m-%d")
         raw_log: List[Dict[str, Any]] = self.logger.load_log(date_str)
+        self.active_downtimes.clear()
         for entry in raw_log:
             if entry.get("end_time") is None:
                 operator = entry.get("operator")
@@ -83,9 +83,7 @@ class AppState:
         """
         now: datetime = self.logger.get_now()
         date_str: str = now.strftime("%Y-%m-%d")
-        ids: List[str] = self.logger.log_downtime_start(
-            date_str, station, operators, reason
-        )
+        ids: List[str] = self.logger.log_downtime_start(station, operators, reason)
 
         for operator, event_id in zip(operators, ids):
             self.active_downtimes[operator] = {
@@ -102,18 +100,14 @@ class AppState:
         Args:
             operators (List[str]): List of operator names to stop downtime for.
         """
-        id_map: Dict[str, List[str]] = {}
-
+        downtime_ids: List[str] = []
         for operator in operators:
             info = self.active_downtimes.get(operator)
-            if info and info["id"] and info["date_str"]:
-                date_str = info["date_str"]
-                if date_str not in id_map:
-                    id_map[date_str] = []
-                id_map[date_str].append(info["id"])
+            if info and info.get("id"):
+                downtime_ids.append(info["id"])
 
-        for date_str, ids in id_map.items():
-            self.logger.log_downtime_stop(date_str, ids)
+        if downtime_ids:
+            self.logger.log_downtime_stop(downtime_ids)
 
         for operator in operators:
             self.active_downtimes.pop(operator, None)
@@ -135,10 +129,14 @@ class AppState:
 
         for entry in raw_log:
             try:
-                timestamp_str: str = entry.get("start_time") or ""
-                timestamp: datetime = datetime.fromisoformat(timestamp_str)
-                end_time = entry.get("end_time", "Unknown")
-                status = "Live" if not end_time or end_time == "Unknown" else "✔️"
+                timestamp_str: str = entry.get("start_time")
+                # Only parse if it's a string
+                if isinstance(timestamp_str, str):
+                    timestamp = datetime.fromisoformat(timestamp_str)
+                else:
+                    timestamp = timestamp_str  # Already a datetime object
+                end_time = entry.get("end_time")
+                status = "Live" if not end_time else "✔️"
 
                 processed.append(
                     {
