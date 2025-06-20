@@ -6,7 +6,6 @@ import datetime
 from typing import Dict, List, Optional
 from core.config import log_dir_path, station_names, EVENTS, OPERATORS
 from core.app_state import AppState
-from core.operator_station_map import OperatorStationMap
 from core.operator_movement_logger import OperatorMovementLogger
 from core.time_sync import TimeSync
 from .components.collapsible_log_frame import CollapsibleLogFrame
@@ -56,23 +55,16 @@ class DowntimeTrackerUI:
         self.selected_station = tk.StringVar(value=station_names[0])
         self.active_downtimes: List[Dict] = []
         self.summary_popup = None
-        stations_dir = os.path.normpath(
-            os.path.join(os.path.dirname(log_dir_path), "stations")
-        )
         movement_dir = os.path.normpath(
             os.path.join(os.path.dirname(log_dir_path), "movement")
         )
-        os.makedirs(stations_dir, exist_ok=True)
         os.makedirs(movement_dir, exist_ok=True)
-        self.operator_station_map = OperatorStationMap(
-            stations_dir, time_sync=self.time_sync
-        )
+
         self.operator_movement_logger = OperatorMovementLogger(
             movement_dir, self.time_sync
         )
         self._load_active_downtimes_from_log()
         self._setup_ui()
-        self._schedule_new_day_check()
 
     def _setup_ui(self) -> None:
         """
@@ -82,9 +74,6 @@ class DowntimeTrackerUI:
         self.root.resizable(False, False)
         self.width = 510
         self.height = 270
-        screen_width = self.root.winfo_screenwidth()
-        self.x = screen_width - self.width
-        self.y = 0
 
         header_frame = ttk.Frame(self.root)
         header_frame.grid(row=0, column=0, columnspan=3, sticky="W", padx=10, pady=5)
@@ -154,14 +143,7 @@ class DowntimeTrackerUI:
         )
 
         self.root.update_idletasks()
-        self.root.geometry(f"{self.width}x{self.root.winfo_height()}+{self.x}+{self.y}")
-
-    def _schedule_new_day_check(self):
-        """
-        Schedule a periodic check to clear the operator-station map if a new day has started.
-        """
-        self.operator_station_map.daily_clear_if_needed()
-        self.root.after(1800000, self._schedule_new_day_check)
+        self.root.geometry(f"{self.width}x{self.root.winfo_height()}")
 
     def _load_active_downtimes_from_log(self):
         """
@@ -184,12 +166,6 @@ class DowntimeTrackerUI:
                     entry.get("operator", "Unknown")
                 )
         self.active_downtimes = list(open_downtimes.values())
-
-    def clear_map(self) -> None:
-        """
-        Clear all operator-station assignments.
-        """
-        self.operator_station_map.clear()
 
     def on_sign_in(self):
         """
@@ -214,7 +190,6 @@ class DowntimeTrackerUI:
                     ):
                         self.state.stop_downtime([op])
                         break
-                self.operator_station_map.set(op, station)
                 self.operator_movement_logger.log_event(op, station, state="Sign In")
             modal.destroy()
             op_str = "\n".join(scanned_operators)
