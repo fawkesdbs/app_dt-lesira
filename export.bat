@@ -1,0 +1,10 @@
+@echo off
+REM Batch script to build executables with PyInstaller for Python 3.8 and 3.12
+
+REM For Python 3.8
+venv.8\Scripts\python.exe -m PyInstaller --onefile --windowed --icon=assets/icon.ico --add-data "assets/icon.ico;assets" --distpath "dist.8" main.py
+
+REM For Python 3.12
+venv.12\Scripts\python.exe -m PyInstaller --onefile --windowed --icon=assets/icon.ico --add-data "assets/icon.ico;assets" --distpath "dist.12" main.py
+
+exit

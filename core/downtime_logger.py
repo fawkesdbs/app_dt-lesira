@@ -1,4 +1,4 @@
-import mysql.connector as connector
+import pytds
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -20,7 +20,6 @@ class DowntimeLogger:
         self,
         db_config: dict,
         time_sync: Optional[TimeSync] = None,
-        server_url: Optional[str] = None,
     ):
         """
         Initialize the DowntimeLogger.
@@ -29,9 +28,13 @@ class DowntimeLogger:
             db_config (dict): Dict with MySQL connection params
             time_sync (Optional[TimeSync]): Optional time synchronization utility.
         """
-        self.db_config = db_config
         self.time_sync = time_sync
-        self.conn = connector.connect(**db_config)
+        self.conn = pytds.connect(
+            server=db_config["server"],
+            database=db_config["database"],
+            user=db_config["user"],
+            password=db_config["password"],
+        )
 
     def get_now(self) -> datetime:
         """
@@ -49,20 +52,21 @@ class DowntimeLogger:
         :param date_str: Date in 'YYYY-MM-DD' format
         :return: List of downtime event dicts
         """
-        cursor = self.conn.cursor(dictionary=True)
+        cursor = self.conn.cursor()
         cursor.execute(
             """
             SELECT id, station, operator, downtime, category,
                    start_time, end_time, duration_minutes
             FROM downtime_logs
-            WHERE DATE(start_time) = %s
+            WHERE CAST(start_time AS DATE) = %s
             ORDER BY start_time ASC
             """,
             (date_str,),
         )
-        rows = cursor.fetchall()
+        columns = [column[0] for column in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
         cursor.close()
-        return rows if rows else []
+        return rows
 
     def log_downtime_start(
         self,
@@ -119,17 +123,17 @@ class DowntimeLogger:
         """
         updated_ids: List[str] = []
         now: datetime = self.get_now()
-        cursor = self.conn.cursor(dictionary=True)
-        format_strings = ",".join(["%s"] * len(downtime_ids))
+        cursor = self.conn.cursor()
+        placeholders = ",".join("%s" for _ in downtime_ids)
         cursor.execute(
-            f"SELECT id, start_time, end_time FROM downtime_logs WHERE id IN ({format_strings})",
+            f"SELECT id, start_time, end_time FROM downtime_logs WHERE id IN ({placeholders})",
             downtime_ids,
         )
         rows = cursor.fetchall()
 
         for row in rows:
-            if row["end_time"] is None:
-                start_time = row["start_time"]
+            row_id, start_time, end_time = row
+            if end_time is None:
                 duration_minutes = (now - start_time).total_seconds() / 60
                 cursor.execute(
                     """
@@ -137,9 +141,9 @@ class DowntimeLogger:
                     SET end_time=%s, duration_minutes=%s
                     WHERE id=%s
                     """,
-                    (now, round(duration_minutes, 2), row["id"]),
+                    (now, round(duration_minutes, 2), row_id),
                 )
-                updated_ids.append(row["id"])
+                updated_ids.append(row_id)
         self.conn.commit()
         cursor.close()
         return updated_ids

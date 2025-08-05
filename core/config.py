@@ -7,7 +7,7 @@ application.
 """
 
 from pathlib import Path
-import csv
+import pytds
 import sys
 import os
 
@@ -64,33 +64,18 @@ station_names = parse_station_info_file()
 # log_dir.mkdir(parents=True, exist_ok=True)
 
 db_config = {
-    "host": "localhost",
-    "user": "root",
-    "password": "newPassword",
-    "database": "downtime_tracker",
+    "server": r"localhost",  # or server\instance_name
+    "database": r"downtime_tracker",
+    "user": r"Lesira",  # SQL Server username
+    "password": r"Lesira",  # SQL Server password
 }
 
-EVENTS = {
-    "Operator move": "Production",
-    "Preparation": "Production",
-    "Meeting": "Production",
-    "Training": "Production",
-    "No material from stores": "Inventory",
-    "No material from production": "Production",
-    "Housekeeping": "Production",
-    "Micro stoppage (Minor adjustment)": "Production",
-    "Stock count": "Inventory",
-    "Rework/Quality problems": "Quality",
-    "Breakdown involving maintenance": "Maintenance",
-    "Breakdown involving operation": "Maintenance",
-    "Preventative Maintenance": "Planned",
-    "No scheduled machine activity": "Planned",
-    "Lunch": "Other",
-    "Tea time": "Other",
-    "Bathroom break": "Other",
-    "Misc.": "Other",
-}
-
+# db_config = {
+#     "server": r"192.168.1.11\SQL2012",  # or server\instance_name
+#     "database": r"downtime_tracker",
+#     "user": r"Siphamandla",  # SQL Server username
+#     "password": r"nimysYrpRGWc1ir",  # SQL Server password
+# }
 
 def resource_path(relative_path):
     """
@@ -110,12 +95,59 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-OPERATORS = {}
+def get_operators_from_db():
+    """
+    Fetch operators from the database.
 
-csv_path = resource_path("data/operators.csv")
+    Returns:
+        dict: A dictionary mapping operator_id to operator_name.
+    """
+    operators = {}
+    try:
+        conn = pytds.connect(
+            server=db_config["server"],
+            database=db_config["database"],
+            user=db_config["user"],
+            password=db_config["password"],
+        )
+        cursor = conn.cursor()
+        # Both operator_id and operator_name are unique, but we use id as key
+        cursor.execute("SELECT operator_id, operator_name FROM operators")
+        for operator_id, operator_name in cursor.fetchall():
+            operators[operator_id] = operator_name
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error loading operators from database: {e}")
+    return operators
 
-with open(csv_path, newline="") as csvfile:
-    reader = csv.reader(csvfile)
-    next(reader)
-    for key, value in reader:
-        OPERATORS[key] = value
+
+def get_events_from_db():
+    """
+    Fetch events and their categories from the database.
+
+    Returns:
+        dict: A dictionary mapping event_name (unique) to event_category.
+    """
+    events = {}
+    try:
+        conn = pytds.connect(
+            server=db_config["server"],
+            database=db_config["database"],
+            user=db_config["user"],
+            password=db_config["password"],
+        )
+        cursor = conn.cursor()
+        # event_name is unique
+        cursor.execute("SELECT event_name, event_category FROM events")
+        for event_name, event_category in cursor.fetchall():
+            events[event_name] = event_category
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error loading events from database: {e}")
+    return events
+
+
+OPERATORS = get_operators_from_db()
+EVENTS = get_events_from_db()

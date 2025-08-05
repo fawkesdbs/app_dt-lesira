@@ -235,8 +235,24 @@ class DowntimeTrackerUI:
             if not scanned_operators:
                 show_error("Missing Operators", "Please scan at least one operator.")
                 return
+
+            operators_in_downtime = set()
+            for dt in self.active_downtimes:
+                for op in dt["operators"]:
+                    if op in scanned_operators:
+                        operators_in_downtime.add(op)
+
+            if operators_in_downtime:
+                op_str = "\n".join(operators_in_downtime)
+                show_error(
+                    "Cannot Sign Out",
+                    f"The following operator(s) are currently in downtime and cannot sign out:\n{op_str}\n"
+                    "Please end their downtime first.",
+                )
+                self.on_stop_downtime()
+                return
+
             for op in scanned_operators:
-                self.operator_station_map.remove(op)
                 self.operator_movement_logger.log_event(
                     op, self.selected_station.get(), state="Sign Out"
                 )
@@ -280,6 +296,18 @@ class DowntimeTrackerUI:
         operator_count = tk.Label(modal, text="No operators added.")
         operator_count.pack(pady=5)
 
+        def update_listbox():
+            operator_listbox.delete(0, tk.END)
+            for op in scanned_operators:
+                operator_listbox.insert(tk.END, op)
+            operator_count.config(
+                text=(
+                    f"{len(scanned_operators)} operators added."
+                    if scanned_operators
+                    else "No operators added."
+                )
+            )
+
         scanned_operators: List[str] = []
 
         add_operator = make_operator_scanner(
@@ -290,6 +318,17 @@ class DowntimeTrackerUI:
             OPERATORS,
         )
         operator_entry.bind("<Return>", lambda event: add_operator())
+
+        def remove_selected_operator(event):
+            selection = operator_listbox.curselection()
+            if selection:
+                idx = selection[0]
+                op_name = operator_listbox.get(idx)
+                if op_name in scanned_operators:
+                    scanned_operators.remove(op_name)
+                    update_listbox()
+
+        operator_listbox.bind("<Double-Button-1>", remove_selected_operator)
 
         selected_event = tk.StringVar(modal)
         selected_event_label = tk.Label(modal, text="Selected Downtime Event: None")
@@ -330,6 +369,7 @@ class DowntimeTrackerUI:
                     "Operator Not Signed In",
                     f"The following operator(s) must be signed in to start downtime:\n{op_str}",
                 )
+                self.on_sign_in()
                 return
 
             event = selected_event.get()

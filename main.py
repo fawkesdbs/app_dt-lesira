@@ -6,8 +6,8 @@ from ui import ui
 def launch_app():
     """Launches the main application."""
     root = tk.Tk()
-    root.update()
-    root.deiconify()
+    # root.update()
+    # root.deiconify()
     time = time_sync.TimeSync()
     # log = downtime_logger.DowntimeLogger(config.log_dir)
     log = downtime_logger.DowntimeLogger(config.db_config, time)

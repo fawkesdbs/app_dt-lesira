@@ -1,5 +1,5 @@
 from datetime import datetime
-import mysql.connector as connector
+import pytds
 from typing import Optional, List, Dict
 from .time_sync import TimeSync
 
@@ -10,9 +10,13 @@ class OperatorMovementLogger:
     """
 
     def __init__(self, db_config: dict, time_sync: Optional[TimeSync] = None):
-        self.db_config = db_config
         self.time_sync = time_sync
-        self.conn = connector.connect(**db_config)
+        self.conn = pytds.connect(
+            server=db_config["server"],
+            database=db_config["database"],
+            user=db_config["user"],
+            password=db_config["password"],
+        )
 
     def _now(self) -> datetime:
         return self.time_sync.get_now() if self.time_sync else datetime.now()
@@ -27,8 +31,11 @@ class OperatorMovementLogger:
         """
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT state FROM operator_events "
-            "WHERE operator=%s ORDER BY event_time DESC LIMIT 1",
+            """
+            SELECT TOP 1 state FROM operator_events 
+            WHERE operator= %s 
+            ORDER BY event_time DESC
+            """,
             (operator,),
         )
         row = cursor.fetchone()
@@ -38,8 +45,10 @@ class OperatorMovementLogger:
             return False
 
         cursor.execute(
-            "INSERT INTO operator_events (operator, station, event_time, state) "
-            "VALUES (%s, %s, %s, %s)",
+            """
+            INSERT INTO operator_events (operator, station, event_time, state) 
+            VALUES (%s, %s, %s, %s)
+            """,
             (operator, station, self._now().strftime("%Y-%m-%d %H:%M:%S"), state),
         )
 
@@ -51,15 +60,18 @@ class OperatorMovementLogger:
         """
         Return all events for a given date ('YYYY-MM-DD') as a list of dicts.
         """
-        cursor = self.conn.cursor(dictionary=True)
+        cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT operator, station, event_time AS time, state "
-            "FROM operator_events "
-            "WHERE DATE(event_time) = %s "
-            "ORDER BY event_time ASC",
+            """
+            SELECT operator, station, event_time AS time, state 
+            FROM operator_events 
+            WHERE CAST(event_time AS DATE) = %s 
+            ORDER BY event_time ASC
+            """,
             (date_str,),
         )
-        rows = cursor.fetchall()
+        columns = [column[0] for column in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
         cursor.close()
         return rows
 
@@ -80,7 +92,7 @@ class OperatorMovementLogger:
             ) latest
                 ON e.operator = latest.operator
                 AND e.event_time = latest.latest
-            WHERE e.state = 'sign in'
+            WHERE e.state = 'Sign In'
             """
         )
         result = {op: st for op, st in cursor.fetchall()}

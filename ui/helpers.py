@@ -196,6 +196,18 @@ def show_operator_modal(
 
     scanned_operators: List[str] = []
 
+    def update_listbox():
+        operator_listbox.delete(0, tk.END)
+        for op in scanned_operators:
+            operator_listbox.insert(tk.END, op)
+        operator_count.config(
+            text=(
+                f"{len(scanned_operators)} operators added."
+                if scanned_operators
+                else "No operators added."
+            )
+        )
+
     add_operator = make_operator_scanner(
         operator_entry,
         operator_listbox,
@@ -205,6 +217,17 @@ def show_operator_modal(
     )
 
     operator_entry.bind("<Return>", lambda event: add_operator())
+
+    def remove_selected_operator(event):
+        selection = operator_listbox.curselection()
+        if selection:
+            idx = selection[0]
+            op_name = operator_listbox.get(idx)
+            if op_name in scanned_operators:
+                scanned_operators.remove(op_name)
+                update_listbox()
+
+    operator_listbox.bind("<Double-Button-1>", remove_selected_operator)
 
     def on_submit():
         submit_callback(scanned_operators, modal)

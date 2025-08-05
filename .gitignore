@@ -12,3 +12,4 @@ main.spec
 server.py
 (deprecated)/
 utils/
+data/

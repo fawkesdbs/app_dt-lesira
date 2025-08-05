@@ -34,9 +34,19 @@ class DowntimeEventSelector:
         :param callback: A function to call with the selected event string.
         :type callback: Callable[[str], None]
         """
+        category_order = [
+            "Production",
+            "Inventory",
+            "Quality",
+            "Maintenance",
+            "Planned",
+            "Other",
+        ]
+
         self.master = master
         self.events = events
         self.callback = callback
+        self.category_order = category_order
         self.grouped_events = self._group_events()
         self._build_selector()
 
@@ -83,7 +93,11 @@ class DowntimeEventSelector:
         self.listbox.pack(padx=10, pady=10)
 
         # Populate grouped event list
-        for category, events in self.grouped_events.items():
+        for category in self.category_order:
+            if category not in self.grouped_events:
+                continue
+
+            events = self.grouped_events[category]
             self.listbox.insert(tk.END, category.upper())
             self.listbox.itemconfig(tk.END, foreground="gray", background="#e0e0e0")
             self.listbox.insert(tk.END, "-" * 40)
